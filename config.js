@@ -11,7 +11,7 @@
 window.ARRIVE_CONFIG = {
   // Paste the Apps Script Web App URL for THIS dashboard's sheet.
   // See SETUP_GUIDE.md for how to generate it.
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzaQWbPqwYPBH4lhTbS33n6EpNJClXAJ69_XzfNdpFgy8DehAGkBjZO1jznlw3lqoXbVA/exec',
+  APPS_SCRIPT_URL: 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE',
 
   // Auto-refresh interval in minutes. Set to 0 to disable.
   AUTO_REFRESH_MINUTES: 5,
