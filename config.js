@@ -18,7 +18,7 @@ window.ARRIVE_CONFIG = {
 
   // How long to wait for the Apps Script response before treating it
   // as failed and retrying.
-  REQUEST_TIMEOUT_MS: 15000,
+  REQUEST_TIMEOUT_MS: 60000,
 
   // How many times to retry a failed fetch before giving up (first
   // load only shows the full error screen; background refreshes
