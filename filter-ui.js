@@ -155,58 +155,82 @@ window.DashboardFilterUI = (function(){
     }
 
     // ---- primitive: tri-state toggle (All / A / B) ----------------------
-    function buildTriToggle(container, opts){
-      const { getOptions, get, set, disabled, disabledNote } = opts; // getOptions(): [{key,label}]
-      function render(){
-        container.innerHTML='';
-        container.classList.toggle('disabled', !!disabled);
+    // ---- primitive: single-choice dropdown (Period presets, Fees) ------
+    // Same visual family as buildMultiSelect (button + panel) but picks
+    // exactly one option and closes on click — no checkboxes needed.
+    function buildSingleSelect(container, opts){
+      const { getLabel, getOptions, get, set } = opts; // getOptions(): () => [{key,label}]
+      container.innerHTML='';
+      const wrap=document.createElement('div'); wrap.className='ms-dropdown';
+      const btn=document.createElement('button'); btn.type='button'; btn.className='ms-btn';
+      const panel=document.createElement('div'); panel.className='ms-panel ms-panel-single hidden';
+      const list=document.createElement('div'); list.className='ms-list';
+
+      function updateBtnLabel(){
+        const options = getOptions();
+        const current = options.find(o=>o.key===get());
+        const isDefault = options.length && options[0].key===get();
+        btn.textContent = `${getLabel()}: ${current ? current.label : ''}`;
+        btn.classList.toggle('narrowed', !isDefault);
+      }
+      function renderList(){
+        list.innerHTML='';
         getOptions().forEach(o=>{
-          const b=document.createElement('button'); b.type='button'; b.className='tri-btn'+(get()===o.key?' active':'');
-          b.textContent=o.label; b.disabled=!!disabled;
-          if(disabled && disabledNote) b.title = disabledNote;
-          if(!disabled) b.addEventListener('click', ()=>{ set(o.key); render(); fireChange(); });
-          container.appendChild(b);
+          const row=document.createElement('div'); row.className='ms-option ms-option-single'+(get()===o.key?' selected':'');
+          row.textContent=o.label;
+          row.addEventListener('click', ()=>{
+            set(o.key);
+            renderList(); updateBtnLabel();
+            panel.classList.add('hidden');
+            fireChange();
+          });
+          list.appendChild(row);
         });
       }
-      render();
-      return { refresh: render };
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); document.querySelectorAll('.ms-panel').forEach(p=>{ if(p!==panel) p.classList.add('hidden'); }); panel.classList.toggle('hidden'); });
+
+      panel.appendChild(list);
+      wrap.appendChild(btn); wrap.appendChild(panel);
+      container.appendChild(wrap);
+      renderList();
+      updateBtnLabel();
+      return { refresh: ()=>{ renderList(); updateBtnLabel(); } };
     }
 
     // ==== PERIOD ==========================================================
-    // Compact redesign: only the 4 quick-date shortcuts remain in the UI.
-    // Custom Range / explicit date pickers / the multi-month checklist are
-    // removed from the panel to cut height — the underlying engine
-    // (filters.js) still supports periodMode:'multi' and arbitrary date
-    // ranges unchanged; they're just not exposed here anymore.
-    const presetContainer = document.getElementById(ids.periodPresets);
-    function renderPresets(){
-      // Built fresh on every call (not once, module-level) so a language
-      // toggle — which calls renderPresets() again via refreshAllControls()
-      // — picks up the current t() strings instead of the ones resolved
-      // when the panel first loaded.
-      const presetDefs = [
+    // Compact redesign: only the 4 quick-date shortcuts remain, merged
+    // into one single-select dropdown (was 4 separate buttons) — reads
+    // "Period: This Month" like every other filter instead of a row of
+    // pills. Custom Range / explicit date pickers / the multi-month
+    // checklist are removed from the panel entirely — the underlying
+    // engine (filters.js) still supports periodMode:'multi' and
+    // arbitrary date ranges unchanged; they're just not exposed here.
+    function periodOptions(){
+      return [
+        {key:'all', label:t('allSelected')},
         {key:'today', label:t('presetToday')},
         {key:'thisWeek', label:t('presetThisWeek')},
         {key:'thisMonth', label:t('presetThisMonth')},
         {key:'lastMonth', label:t('presetLastMonth')}
       ];
-      presetContainer.innerHTML='';
-      presetDefs.forEach(p=>{
-        const chip=document.createElement('div'); chip.className='preset-chip'+(state.activePreset===p.key?' active':'');
-        chip.textContent=p.label;
-        chip.addEventListener('click', ()=>{
-          const range = filterEngine.resolvePreset(p.key);
-          if(range){
-            state.periodMode='range'; state.monthFrom=range.monthFrom; state.monthTo=range.monthTo;
-            state.activePreset=p.key; state.customFrom=''; state.customTo='';
-          }
-          renderPresets();
-          fireChange();
-        });
-        presetContainer.appendChild(chip);
-      });
     }
-    renderPresets();
+    const periodSingle = buildSingleSelect(document.getElementById(ids.periodPresets), {
+      getLabel: ()=>t('periodLabel'),
+      getOptions: periodOptions,
+      get: ()=> state.activePreset || 'all',
+      set: (key)=>{
+        if(key==='all'){
+          state.periodMode='range'; state.monthFrom=0; state.monthTo=months.length-1;
+          state.activePreset=null; state.customFrom=''; state.customTo='';
+          return;
+        }
+        const range = filterEngine.resolvePreset(key);
+        if(range){
+          state.periodMode='range'; state.monthFrom=range.monthFrom; state.monthTo=range.monthTo;
+          state.activePreset=key; state.customFrom=''; state.customTo='';
+        }
+      }
+    });
 
     // ==== LOCATION =========================================================
     // Compact redesign: City/Branch (previously chip-rows) now use the same
@@ -223,7 +247,8 @@ window.DashboardFilterUI = (function(){
     const merchantMulti = buildMultiSelect(document.getElementById(ids.merchantMulti), { label:()=>t('merchantFilterLabel'), options:clients, selectedSet:state.clients });
     const reasonMulti = buildMultiSelect(document.getElementById(ids.reasonMulti), { label:()=>t('reasonFilterLabel'), options:reasons, selectedSet:state.reasons });
 
-    const feesToggle = buildTriToggle(document.getElementById(ids.feesToggle), {
+    const feesSingle = buildSingleSelect(document.getElementById(ids.feesToggle), {
+      getLabel: ()=>t('extraFeesFilterLabel'),
       getOptions: ()=>[{key:'all',label:t('feesAll')},{key:'has',label:t('feesHas')},{key:'none',label:t('feesNone')}],
       get: ()=>state.feesMode, set: (k)=>{ state.feesMode=k; }
     });
@@ -259,7 +284,7 @@ window.DashboardFilterUI = (function(){
       return [
         { active: ()=> state.periodMode==='multi' ? state.selectedMonths.size<months.length : !(state.monthFrom===0 && state.monthTo===months.length-1),
           label: ()=> state.periodMode==='multi' ? `${t('periodChipLabel')}: ${state.selectedMonths.size}/${months.length}` : `${monthLabel(months[state.monthFrom])} → ${monthLabel(months[state.monthTo])}`,
-          clear: ()=>{ state.periodMode='range'; state.monthFrom=0; state.monthTo=months.length-1; setAll(state.selectedMonths, months.map((_,i)=>i)); state.activePreset=null; state.customFrom=''; state.customTo=''; renderPresets(); } },
+          clear: ()=>{ state.periodMode='range'; state.monthFrom=0; state.monthTo=months.length-1; setAll(state.selectedMonths, months.map((_,i)=>i)); state.activePreset=null; state.customFrom=''; state.customTo=''; periodSingle.refresh(); } },
         { active: ()=> state.cities.size<cities.length, label: ()=>`${t('cityLabel')}: ${state.cities.size}/${cities.length}`, clear: ()=>{ setAll(state.cities, cities); cityMulti.refresh(); } },
         { active: ()=> state.areas.size<areas.length, label: ()=>`${t('areaFilterLabel')}: ${state.areas.size}/${areas.length}`, clear: ()=>{ setAll(state.areas, areas); areaMulti.refresh(); } },
         { active: ()=> state.branches.size<branches.length, label: ()=>`${t('branchFilterLabel')}: ${state.branches.size}/${branches.length}`, clear: ()=>{ setAll(state.branches, branches); branchMulti.refresh(); } },
@@ -268,7 +293,7 @@ window.DashboardFilterUI = (function(){
         { active: ()=> state.drivers.size<drivers.length, label: ()=>`${t('driverChipLabel')}: ${state.drivers.size}/${drivers.length}`, clear: ()=>{ setAll(state.drivers, drivers); driverMulti.refresh(); } },
         { active: ()=> state.clients.size<clients.length, label: ()=>`${t('merchantChipLabel')}: ${state.clients.size}/${clients.length}`, clear: ()=>{ setAll(state.clients, clients); merchantMulti.refresh(); } },
         { active: ()=> state.reasons.size<reasons.length, label: ()=>`${t('reasonChipLabel')}: ${state.reasons.size}/${reasons.length}`, clear: ()=>{ setAll(state.reasons, reasons); reasonMulti.refresh(); } },
-        { active: ()=> state.feesMode!=='all', label: ()=>`${t('feesChipLabel')}: ${state.feesMode==='has'?t('feesHas'):t('feesNone')}`, clear: ()=>{ state.feesMode='all'; feesToggle.refresh(); } },
+        { active: ()=> state.feesMode!=='all', label: ()=>`${t('feesChipLabel')}: ${state.feesMode==='has'?t('feesHas'):t('feesNone')}`, clear: ()=>{ state.feesMode='all'; feesSingle.refresh(); } },
         { active: ()=> !!state.globalQuery, label: ()=>`${t('globalSearchLabel')}: "${state.globalQuery}"`, clear: ()=>{ state.globalQuery=''; const el=document.getElementById(ids.globalSearch); if(el) el.value=''; } }
       ];
     }
@@ -313,7 +338,7 @@ window.DashboardFilterUI = (function(){
     // Reset All and after a background data refresh restores a filter
     // snapshot (see bootstrapOrUpdate in dashboard.js).
     function refreshAllControls(){
-      renderPresets();
+      periodSingle.refresh();
       cityMulti.refresh();
       areaMulti.refresh();
       branchMulti.refresh();
@@ -322,7 +347,7 @@ window.DashboardFilterUI = (function(){
       driverMulti.refresh();
       merchantMulti.refresh();
       reasonMulti.refresh();
-      feesToggle.refresh();
+      feesSingle.refresh();
       renderRecordedBadge();
       renderActiveChips();
     }
