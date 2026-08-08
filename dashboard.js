@@ -29,6 +29,11 @@ const CONFIG = window.ARRIVE_CONFIG || {};
   document.getElementById('langBtn').addEventListener('click', ()=>{
     appState.lang = appState.lang==='ar' ? 'en' : 'ar';
     applyStaticTranslations();
+    // Relabels the filter panel's dynamically-built controls (dropdown
+    // buttons, quick-date presets, fees toggle, recorded badge) — these
+    // aren't plain data-i18n elements, so applyStaticTranslations() alone
+    // can't reach them. Doesn't touch state or trigger a re-filter.
+    if(window.__dashboardRefreshFilterUI) window.__dashboardRefreshFilterUI();
     if(window.__dashboardRender) window.__dashboardRender();
   });
   applyStaticTranslations();
@@ -539,6 +544,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       }
     });
 
+    window.__dashboardRefreshFilterUI = filterUI.refreshAllControls;
     window.__dashboardRender = renderAll;
     renderAll();
   }

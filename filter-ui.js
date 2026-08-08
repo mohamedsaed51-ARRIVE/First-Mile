@@ -93,6 +93,10 @@ window.DashboardFilterUI = (function(){
     // instead of a separate chip-row implementation for the small sets.
     function buildMultiSelect(container, opts){
       const { label, options, selectedSet, formatLabel } = opts;
+      // label may be a plain string or a () => string — the latter is
+      // re-read on every refresh() so a language toggle picks it up;
+      // a plain string is still supported for backward compatibility.
+      const getLabel = typeof label === 'function' ? label : ()=>label;
       container.innerHTML='';
       const wrap=document.createElement('div'); wrap.className='ms-dropdown';
       const btn=document.createElement('button'); btn.type='button'; btn.className='ms-btn';
@@ -107,7 +111,7 @@ window.DashboardFilterUI = (function(){
       function updateBtnLabel(){
         const n = selectedSet.size;
         const allSelected = n===options.length;
-        btn.textContent = `${label} (${allSelected ? t('allSelected') : t('nSelected',{n})})`;
+        btn.textContent = `${getLabel()} (${allSelected ? t('allSelected') : t('nSelected',{n})})`;
         btn.classList.toggle('narrowed', !allSelected);
       }
       function renderList(query){
@@ -138,23 +142,34 @@ window.DashboardFilterUI = (function(){
       container.appendChild(wrap);
       renderList('');
       updateBtnLabel();
-      return { refresh: ()=>{ renderList(search.value.trim().toLowerCase()); updateBtnLabel(); } };
+      // refresh() re-syncs everything to the current selection AND the
+      // current language — search placeholder / Select all / Clear text
+      // were previously only ever set once at construction.
+      return { refresh: ()=>{
+        search.placeholder = t('filterTablePlaceholder');
+        selectAllBtn.textContent = t('selectAllOpt');
+        clearBtn.textContent = t('clearOpt');
+        renderList(search.value.trim().toLowerCase());
+        updateBtnLabel();
+      } };
     }
 
     // ---- primitive: tri-state toggle (All / A / B) ----------------------
     function buildTriToggle(container, opts){
-      const { options, get, set, disabled, disabledNote } = opts; // options: [{key,label}]
-      container.innerHTML='';
-      container.classList.toggle('disabled', !!disabled);
-      options.forEach(o=>{
-        const b=document.createElement('button'); b.type='button'; b.className='tri-btn'+(get()===o.key?' active':'');
-        b.textContent=o.label; b.disabled=!!disabled;
-        if(disabled && disabledNote) b.title = disabledNote;
-        if(!disabled) b.addEventListener('click', ()=>{ set(o.key); refreshTri(); fireChange(); });
-        container.appendChild(b);
-      });
-      function refreshTri(){ container.querySelectorAll('.tri-btn').forEach((b,i)=>b.classList.toggle('active', options[i].key===get())); }
-      return { refresh: refreshTri };
+      const { getOptions, get, set, disabled, disabledNote } = opts; // getOptions(): [{key,label}]
+      function render(){
+        container.innerHTML='';
+        container.classList.toggle('disabled', !!disabled);
+        getOptions().forEach(o=>{
+          const b=document.createElement('button'); b.type='button'; b.className='tri-btn'+(get()===o.key?' active':'');
+          b.textContent=o.label; b.disabled=!!disabled;
+          if(disabled && disabledNote) b.title = disabledNote;
+          if(!disabled) b.addEventListener('click', ()=>{ set(o.key); render(); fireChange(); });
+          container.appendChild(b);
+        });
+      }
+      render();
+      return { refresh: render };
     }
 
     // ==== PERIOD ==========================================================
@@ -163,14 +178,18 @@ window.DashboardFilterUI = (function(){
     // removed from the panel to cut height — the underlying engine
     // (filters.js) still supports periodMode:'multi' and arbitrary date
     // ranges unchanged; they're just not exposed here anymore.
-    const presetDefs = [
-      {key:'today', label:t('presetToday')},
-      {key:'thisWeek', label:t('presetThisWeek')},
-      {key:'thisMonth', label:t('presetThisMonth')},
-      {key:'lastMonth', label:t('presetLastMonth')}
-    ];
     const presetContainer = document.getElementById(ids.periodPresets);
     function renderPresets(){
+      // Built fresh on every call (not once, module-level) so a language
+      // toggle — which calls renderPresets() again via refreshAllControls()
+      // — picks up the current t() strings instead of the ones resolved
+      // when the panel first loaded.
+      const presetDefs = [
+        {key:'today', label:t('presetToday')},
+        {key:'thisWeek', label:t('presetThisWeek')},
+        {key:'thisMonth', label:t('presetThisMonth')},
+        {key:'lastMonth', label:t('presetLastMonth')}
+      ];
       presetContainer.innerHTML='';
       presetDefs.forEach(p=>{
         const chip=document.createElement('div'); chip.className='preset-chip'+(state.activePreset===p.key?' active':'');
@@ -193,28 +212,32 @@ window.DashboardFilterUI = (function(){
     // Compact redesign: City/Branch (previously chip-rows) now use the same
     // searchable dropdown as Area/Driver/etc — same buildMultiSelect(), no
     // duplicated logic, just a uniform, denser control.
-    const cityMulti = buildMultiSelect(document.getElementById(ids.cityChips), { label:t('cityLabel'), options:cities, selectedSet:state.cities });
-    const areaMulti = buildMultiSelect(document.getElementById(ids.areaMulti), { label:t('areaFilterLabel'), options:areas, selectedSet:state.areas });
-    const branchMulti = buildMultiSelect(document.getElementById(ids.branchChips), { label:t('branchFilterLabel'), options:branches, selectedSet:state.branches });
+    const cityMulti = buildMultiSelect(document.getElementById(ids.cityChips), { label:()=>t('cityLabel'), options:cities, selectedSet:state.cities });
+    const areaMulti = buildMultiSelect(document.getElementById(ids.areaMulti), { label:()=>t('areaFilterLabel'), options:areas, selectedSet:state.areas });
+    const branchMulti = buildMultiSelect(document.getElementById(ids.branchChips), { label:()=>t('branchFilterLabel'), options:branches, selectedSet:state.branches });
 
     // ==== OPERATIONAL =======================================================
-    const typeMulti = buildMultiSelect(document.getElementById(ids.typeChips), { label:t('requestTypeLabel'), options:types, selectedSet:state.types, formatLabel:typeLabel });
-    const statusMulti = buildMultiSelect(document.getElementById(ids.statusChips), { label:t('statusLabel'), options:statuses, selectedSet:state.statuses, formatLabel:statusLabel });
-    const driverMulti = buildMultiSelect(document.getElementById(ids.driverMulti), { label:t('driverFilterLabel'), options:drivers, selectedSet:state.drivers, formatLabel:(d)=>d.trim() });
-    const merchantMulti = buildMultiSelect(document.getElementById(ids.merchantMulti), { label:t('merchantFilterLabel'), options:clients, selectedSet:state.clients });
-    const reasonMulti = buildMultiSelect(document.getElementById(ids.reasonMulti), { label:t('reasonFilterLabel'), options:reasons, selectedSet:state.reasons });
+    const typeMulti = buildMultiSelect(document.getElementById(ids.typeChips), { label:()=>t('requestTypeLabel'), options:types, selectedSet:state.types, formatLabel:typeLabel });
+    const statusMulti = buildMultiSelect(document.getElementById(ids.statusChips), { label:()=>t('statusLabel'), options:statuses, selectedSet:state.statuses, formatLabel:statusLabel });
+    const driverMulti = buildMultiSelect(document.getElementById(ids.driverMulti), { label:()=>t('driverFilterLabel'), options:drivers, selectedSet:state.drivers, formatLabel:(d)=>d.trim() });
+    const merchantMulti = buildMultiSelect(document.getElementById(ids.merchantMulti), { label:()=>t('merchantFilterLabel'), options:clients, selectedSet:state.clients });
+    const reasonMulti = buildMultiSelect(document.getElementById(ids.reasonMulti), { label:()=>t('reasonFilterLabel'), options:reasons, selectedSet:state.reasons });
 
     const feesToggle = buildTriToggle(document.getElementById(ids.feesToggle), {
-      options: [{key:'all',label:t('feesAll')},{key:'has',label:t('feesHas')},{key:'none',label:t('feesNone')}],
+      getOptions: ()=>[{key:'all',label:t('feesAll')},{key:'has',label:t('feesHas')},{key:'none',label:t('feesNone')}],
       get: ()=>state.feesMode, set: (k)=>{ state.feesMode=k; }
     });
     // Recorded-on-System can't be filtered (see filters.js header note) —
     // shown as a single compact disabled badge instead of 3 buttons, since
-    // it never does anything but explain why.
+    // it never does anything but explain why. Wrapped in a function (not
+    // set inline) so a language toggle can re-render it too.
     const recordedEl = document.getElementById(ids.recordedToggle);
-    if(recordedEl){
-      recordedEl.innerHTML = `<span class="recorded-badge" title="${esc(t('recordedUnavailable'))}">${esc(t('recordedFilterLabel'))}: ${esc(t('recordedAll'))}</span>`;
+    function renderRecordedBadge(){
+      if(recordedEl){
+        recordedEl.innerHTML = `<span class="recorded-badge" title="${esc(t('recordedUnavailable'))}">${esc(t('recordedFilterLabel'))}: ${esc(t('recordedAll'))}</span>`;
+      }
     }
+    renderRecordedBadge();
 
     // ==== SEARCH ============================================================
     // Compact redesign: only Global Search remains visible (it already
@@ -300,6 +323,7 @@ window.DashboardFilterUI = (function(){
       merchantMulti.refresh();
       reasonMulti.refresh();
       feesToggle.refresh();
+      renderRecordedBadge();
       renderActiveChips();
     }
 
