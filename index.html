@@ -315,6 +315,53 @@ tbody tr:hover{background:var(--paper);}
   .header-right{align-items:flex-start; width:100%; flex-direction:row; justify-content:space-between;}
 }
 @media (max-width:640px){ .kpi-row{grid-template-columns:repeat(2,1fr);} }
+/* ---- Phase 1 report: Management Report overlay ---- */
+body.report-open{overflow:hidden;}
+.report-overlay{position:fixed; inset:0; background:rgba(16,27,48,0.55); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:32px 16px; overflow-y:auto;}
+.report-overlay.hidden{display:none;}
+.report-modal{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-lg); width:100%; max-width:980px; margin-bottom:32px;}
+.report-header{display:flex; align-items:center; gap:14px; padding:20px 26px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--card); border-radius:var(--radius) var(--radius) 0 0; z-index:2;}
+.report-brand{display:flex; flex-direction:column; gap:2px;}
+.report-brand-name{font-family:var(--font-display); font-weight:700; font-size:15px; letter-spacing:.06em; color:var(--gold);}
+.report-brand-sub{font-size:18px; font-weight:700; color:var(--navy);}
+.report-generated{font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); margin-inline-start:auto; white-space:nowrap;}
+html[dir="rtl"] .report-generated{font-family:var(--font-body-ar); font-weight:600;}
+.report-close{background:var(--paper); border:1px solid var(--line); border-radius:8px; width:32px; height:32px; cursor:pointer; color:var(--ink-soft); font-size:14px; line-height:1;}
+.report-close:hover{border-color:var(--gold); color:var(--navy);}
+.report-body{padding:22px 26px 30px;}
+.report-section{margin-bottom:26px;}
+.report-section-title{font-family:var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--gold); font-weight:700; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--line);}
+html[dir="rtl"] .report-section-title{font-family:var(--font-body-ar);}
+
+.report-scope-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:10px 20px;}
+.report-scope-item{display:flex; flex-direction:column; gap:2px; font-size:13px;}
+.report-scope-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700;}
+.report-scope-value{color:var(--ink); font-weight:600;}
+
+.report-kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px;}
+.report-kpi{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 16px;}
+.report-kpi-label{font-size:11px; color:var(--ink-soft); margin-bottom:6px;}
+.report-kpi-value{font-size:22px; font-weight:700; color:var(--navy); font-family:var(--font-mono);}
+html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
+
+.report-grid-2{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:14px;}
+.report-grid-2 .panel{margin-bottom:0;}
+
+.report-attention-item{display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px dashed var(--line);}
+.report-attention-item:last-child{border-bottom:none;}
+.report-attention-idx{flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono);}
+.report-attention-label{font-weight:700; color:var(--navy); font-size:13.5px;}
+.report-attention-detail{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+
+.report-insight-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; margin-bottom:14px;}
+.report-rec-list{display:flex; flex-direction:column; gap:8px;}
+
+@media print{
+  body > *:not(.report-overlay){display:none !important;}
+  .report-overlay{position:static; background:none; padding:0; overflow:visible;}
+  .report-modal{box-shadow:none; max-width:none;}
+  .report-close, .filters, .kpi-row{display:none !important;}
+}
 </style>
 </head>
 <body>
@@ -354,6 +401,7 @@ tbody tr:hover{background:var(--paper);}
         <div class="lang-btn" id="langBtn">EN / عربي</div>
         <div class="export-btn" id="refreshBtn"><svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0115.3-6.4M21 12a9 9 0 01-15.3 6.4M3 5v5h5M21 19v-5h-5"/></svg><span data-i18n="refreshBtn">Refresh</span></div>
         <div class="export-btn" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span data-i18n="exportBtn">Export CSV</span></div>
+        <div class="export-btn" id="reportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M8 13h8M8 17h8M8 9h3"/></svg><span data-i18n="managementReportBtn">Management Report</span></div>
       </div>
       <div class="record-stamp"><div class="record-count" id="totalRecordsLabel">—</div><div class="record-label" data-i18n="totalRequestsFooter">Total Logged Requests</div></div>
     </div>
@@ -527,6 +575,23 @@ tbody tr:hover{background:var(--paper);}
 </div>
 
 <!--
+  Management Report overlay (Phase 1 report engine). Empty shell only —
+  reportPreview.js fills #reportBody from the data reportData.js builds
+  out of the dashboard's own current filtered aggregate. Hidden by
+  default; reportBtn (above) opens it.
+-->
+<div class="report-overlay hidden" id="reportOverlay">
+  <div class="report-modal">
+    <div class="report-header">
+      <div class="report-brand"><span class="report-brand-name">ARRIVE</span><span class="report-brand-sub" data-i18n="reportTitle">First Mile Management Report</span></div>
+      <div class="report-generated" id="reportGeneratedLabel"></div>
+      <button type="button" class="report-close" id="reportCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+  </div>
+</div>
+
+<!--
   Shared ARRIVE architecture: config.js holds everything environment-
   specific (the Apps Script URL, refresh timing); arrive-data-service.js
   is the reusable fetch/retry/auto-refresh layer shared by every ARRIVE
@@ -552,6 +617,8 @@ tbody tr:hover{background:var(--paper);}
 <script src="filters.js"></script>
 <script src="aggregations.js"></script>
 <script src="filter-ui.js"></script>
+<script src="reportData.js"></script>
+<script src="reportPreview.js"></script>
 <script src="dashboard.js"></script>
 
 </body>

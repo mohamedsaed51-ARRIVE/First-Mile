@@ -98,7 +98,8 @@ const CONFIG = window.ARRIVE_CONFIG || {};
   let filterSnapshot = null;
   function resetInteractiveNodes(){
     ['periodFromDate','periodToDate','globalSearch','driverSearch','merchantSearch','areaGlobalSearch',
-     'driverTableSearch','areaTableSearch','clientTableSearch','resetBtn','exportBtn'].forEach(id=>{
+     'driverTableSearch','areaTableSearch','clientTableSearch','resetBtn','exportBtn',
+     'reportBtn','reportOverlay','reportCloseBtn'].forEach(id=>{
       const el = document.getElementById(id);
       if(el){ const clone = el.cloneNode(true); el.parentNode.replaceChild(clone, el); }
     });
@@ -359,6 +360,11 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       renderDQ();
 
       renderTables();
+
+      // PHASE 1 report: if the Management Report is open, refresh it with
+      // this exact agg — same object the dashboard just rendered from, no
+      // independent filtering. If it's closed, this is a no-op.
+      reportPreview.refreshIfOpen(reportBuilder.buildManagementReportData(agg, state));
     }
 
     // PHASE 1 perf: table-local interactions (search/sort/pagination on
@@ -390,8 +396,19 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       el.innerHTML = html;
     }
 
-    function renderInsights(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg){
-      const MIN_VOL=15;
+    // Thresholds used by insights/recommendations/attention-flagging.
+    // Previously duplicated as three separate `const MIN_VOL=15` locals;
+    // centralized here so there's one place to tune them, reused by both
+    // the dashboard panels and the Management Report (Phase 1 report).
+    const MIN_QUALIFYING_DRIVER_VOLUME = 15;
+    const MIN_QUALIFYING_CITY_VOLUME = 30;
+
+    // Pure: given the current aggregates, returns the insight cards
+    // ({tag, main, sub}[]) with no DOM access — reused by renderInsights()
+    // (dashboard panel) and the Management Report so this logic exists
+    // in exactly one place.
+    function computeInsightCards(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg){
+      const MIN_VOL=MIN_QUALIFYING_DRIVER_VOLUME;
       const driverList = Object.keys(driverAgg).map(di=>({name:drivers[di].trim(), count:driverAgg[di].count, rate:driverAgg[di].count?driverAgg[di].done/driverAgg[di].count*100:0})).filter(d=>d.count>=MIN_VOL);
       const bestDriver = driverList.slice().sort((a,b)=>b.rate-a.rate)[0];
       const worstDriver = driverList.slice().sort((a,b)=>a.rate-b.rate)[0];
@@ -416,34 +433,47 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       if(topCity) cards.push({tag:t('tagMostActiveCity'), main:esc(topCity), sub:t('subFeesCity',{fees:fmtCurrency(cityAgg[topCity].fees)})});
       if(topType) cards.push({tag:t('tagDominantType'), main:typeLabel(topType), sub:t('subReqRangeType',{n:fmtNum(typeAgg[topType])})});
       if(topBranch) cards.push({tag:t('tagTopBranch'), main:esc(topBranch), sub:t('subBranchCoverage',{n:fmtNum(branchAgg[topBranch]), c:meta.branchCoverage, t:meta.branchTotal})});
+      return cards;
+    }
 
+    function renderInsights(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg){
+      const cards = computeInsightCards(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg);
       const row=document.getElementById('insightRow'); row.innerHTML='';
       cards.forEach(c=>{ const el=document.createElement('div'); el.className='insight-card fade-in';
         el.innerHTML=`<div class="insight-tag">${esc(c.tag)}</div><div class="insight-main">${c.main}</div><div class="insight-sub">${esc(c.sub)}</div>`; row.appendChild(el); });
     }
 
-    function renderTopBottomDrivers(driverAgg){
-      const MIN_VOL=15;
+    // Pure: returns {top, bottom} qualifying-driver lists (by success
+    // rate), no DOM access.
+    function computeTopBottomDrivers(driverAgg){
+      const MIN_VOL=MIN_QUALIFYING_DRIVER_VOLUME;
       const list = Object.keys(driverAgg).map(di=>({name:drivers[di].trim(), count:driverAgg[di].count, rate:driverAgg[di].count?driverAgg[di].done/driverAgg[di].count*100:0})).filter(d=>d.count>=MIN_VOL);
       const top = list.slice().sort((a,b)=>b.rate-a.rate).slice(0,10);
       const bottom = list.slice().sort((a,b)=>a.rate-b.rate).slice(0,10);
+      return { top, bottom, minVolume: MIN_VOL };
+    }
+
+    function renderTopBottomDrivers(driverAgg){
+      const { top, bottom, minVolume } = computeTopBottomDrivers(driverAgg);
       const renderList = (el, arr) => {
-        el.innerHTML = arr.length===0 ? `<div class="empty-state">${t('notEnoughQualifying',{min:MIN_VOL})}</div>` :
+        el.innerHTML = arr.length===0 ? `<div class="empty-state">${t('notEnoughQualifying',{min:minVolume})}</div>` :
           arr.map((d,i)=>`<div class="mini-lb-row"><span class="rnk">${i+1}</span><span class="nm">${esc(d.name)}</span><span class="vl">${d.rate.toFixed(1)}% · ${fmtNum(d.count)}</span></div>`).join('');
       };
       renderList(document.getElementById('topDriversList'), top);
       renderList(document.getElementById('bottomDriversList'), bottom);
     }
 
-    function renderRecommendations(driverAgg, areaAgg, cityAgg, reasonAgg, branchAgg){
+    // Pure: returns the recommendation strings (HTML with embedded <b>,
+    // consistent with the existing i18n pattern), no DOM access.
+    function computeRecommendationItems(driverAgg, areaAgg, cityAgg, reasonAgg, branchAgg){
       const items=[];
       const areaList = Object.keys(areaAgg).map(ai=>({name:areas[ai], count:areaAgg[ai].count, fees:areaAgg[ai].fees}));
       const topArea = areaList.slice().sort((a,b)=>b.count-a.count)[0];
       const feesArea = areaList.slice().sort((a,b)=>b.fees-a.fees)[0];
-      const driverList = Object.keys(driverAgg).map(di=>({name:drivers[di].trim(), count:driverAgg[di].count, rate:driverAgg[di].count?driverAgg[di].done/driverAgg[di].count*100:0})).filter(d=>d.count>=15);
+      const driverList = Object.keys(driverAgg).map(di=>({name:drivers[di].trim(), count:driverAgg[di].count, rate:driverAgg[di].count?driverAgg[di].done/driverAgg[di].count*100:0})).filter(d=>d.count>=MIN_QUALIFYING_DRIVER_VOLUME);
       const topDriver = driverList.slice().sort((a,b)=>b.count-a.count)[0];
       let worstCityName=null, worstRate=101;
-      Object.keys(cityAgg).forEach(c=>{ const tt=cityAgg[c].done+cityAgg[c].fail; if(tt>=30){ const rate=cityAgg[c].done/tt*100; if(rate<worstRate){worstRate=rate; worstCityName=c;} } });
+      Object.keys(cityAgg).forEach(c=>{ const tt=cityAgg[c].done+cityAgg[c].fail; if(tt>=MIN_QUALIFYING_CITY_VOLUME){ const rate=cityAgg[c].done/tt*100; if(rate<worstRate){worstRate=rate; worstCityName=c;} } });
       const reasonList = Object.keys(reasonAgg).map(ri=>({name:reasons[ri], count:reasonAgg[ri]})).filter(r=>r.name!=='N/A').sort((a,b)=>b.count-a.count);
 
       if(topArea) items.push(t('recTopArea',{area:`<b>${esc(topArea.name)}</b>`, n:fmtNum(topArea.count)}));
@@ -451,7 +481,11 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       if(worstCityName) items.push(t('recWorstCity',{city:`<b>${esc(worstCityName)}</b>`, rate:worstRate.toFixed(1)}));
       if(feesArea) items.push(t('recFeesArea',{area:`<b>${esc(feesArea.name)}</b>`, fees:fmtCurrency(feesArea.fees)}));
       if(reasonList[0] && reasonList[0].count>0) items.push(t('recTopReason',{reason:`<b>${esc(reasonList[0].name)}</b>`, n:fmtNum(reasonList[0].count)}));
+      return items;
+    }
 
+    function renderRecommendations(driverAgg, areaAgg, cityAgg, reasonAgg, branchAgg){
+      const items = computeRecommendationItems(driverAgg, areaAgg, cityAgg, reasonAgg, branchAgg);
       const list=document.getElementById('recList');
       list.innerHTML = items.length===0 ? `<div class="empty-state">${t('notEnoughRecs')}</div>` :
         items.map(txt=>`<div class="rec-item"><div class="rec-icon">${icon('rate','#fff')}</div><div class="rec-text">${txt}</div></div>`).join('');
@@ -545,6 +579,27 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     });
 
     window.__dashboardRefreshFilterUI = filterUI.refreshAllControls;
+
+    // PHASE 1 report: the Management Report data builder — reshapes the
+    // SAME aggregate the dashboard already computed (see reportData.js's
+    // header comment for why this guarantees no independent filtering).
+    // insightsEngine reuses the dashboard's own pure compute*() functions
+    // instead of a second copy of that logic.
+    const reportBuilder = DashboardReport.createReportBuilder({
+      lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
+      meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
+      t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
+      insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
+    });
+    const reportPreview = DashboardReportPreview.createReportPreview({
+      overlayId:'reportOverlay', closeBtnId:'reportCloseBtn', bodyId:'reportBody', generatedLabelId:'reportGeneratedLabel',
+      t, esc, fmtNum, fmtCurrency, rateClass
+    });
+    document.getElementById('reportBtn').addEventListener('click', ()=>{
+      const agg = cachedAgg || computeAggregates();
+      reportPreview.show(reportBuilder.buildManagementReportData(agg, state));
+    });
+
     window.__dashboardRender = renderAll;
     renderAll();
   }
