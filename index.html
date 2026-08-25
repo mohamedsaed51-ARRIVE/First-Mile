@@ -362,6 +362,59 @@ html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
   .report-modal{box-shadow:none; max-width:none;}
   .report-close, .filters, .kpi-row{display:none !important;}
 }
+/* ---- Phase 2: Comparison Engine ---- */
+.comparison-panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 26px; margin-bottom:16px;}
+.comparison-header{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.comparison-toggle-btn{cursor:pointer; border:none;}
+.comparison-toggle-btn.on{background:var(--navy);}
+.comparison-periods{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.comparison-periods.hidden{display:none;}
+.comparison-period-block{display:flex; align-items:center; gap:8px;}
+.comparison-period-tag{font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700;}
+.comparison-period-value{font-weight:700; color:var(--navy); font-size:13px; font-family:var(--font-mono);}
+.comparison-vs{font-family:var(--font-mono); font-size:11px; color:var(--gold); font-weight:700; text-transform:uppercase;}
+.comparison-select{font-family:var(--font-mono); font-size:12px; padding:6px 9px; border-radius:7px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer;}
+.comparison-arrow{color:var(--ink-faint); font-size:12px;}
+
+.comparison-body{margin-top:18px; padding-top:16px; border-top:1px dashed var(--line);}
+.comparison-body.hidden{display:none;}
+.comparison-section{margin-bottom:22px;}
+.comparison-section:last-child{margin-bottom:0;}
+.comparison-section-title{font-family:var(--font-mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--gold); font-weight:700; margin-bottom:10px;}
+
+.comparison-kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
+.comparison-kpi{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px;}
+.comparison-kpi-label{font-size:11px; color:var(--ink-soft); margin-bottom:6px;}
+.comparison-kpi-values{display:flex; align-items:baseline; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
+.comparison-kpi-current{font-size:19px; font-weight:700; color:var(--navy); font-family:var(--font-mono);}
+.comparison-kpi-previous{font-size:12px; color:var(--ink-faint); font-family:var(--font-mono);}
+.comparison-kpi-change{display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; font-family:var(--font-mono);}
+.comparison-kpi-change.improved{color:var(--teal);}
+.comparison-kpi-change.declined{color:var(--rust);}
+.comparison-kpi-change.neutral{color:var(--ink-soft);}
+
+.comparison-badge-insufficient{font-size:10.5px; color:var(--ink-faint); font-style:italic;}
+.comparison-onlyin-badge{font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; padding:1px 6px; border-radius:4px; background:var(--paper); border:1px solid var(--line); color:var(--ink-faint); margin-inline-start:6px; white-space:nowrap;}
+.comparison-insight-list{display:flex; flex-direction:column; gap:8px;}
+.comparison-insight-item{background:var(--paper); border-inline-start:3px solid var(--gold); border-radius:6px; padding:9px 12px; font-size:13px; color:var(--ink);}
+
+.comparison-table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+.comparison-table-scroll table{min-width:520px;}
+
+html[dir="rtl"] .comparison-panel *{font-family:var(--font-body-ar);}
+html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, html[dir="rtl"] .comparison-period-tag, html[dir="rtl"] .comparison-period-value{font-weight:700;}
+
+@media (max-width:700px){
+  .comparison-header{flex-direction:column; align-items:flex-start;}
+  .comparison-periods{width:100%;}
+}
+/* ---- Phase 3: report chart layout (reuses .chart-box/.chart-legend/.panel from the dashboard) ---- */
+.report-summary-layout{display:flex; gap:24px; align-items:center; flex-wrap:wrap;}
+.report-summary-layout .report-kpis{flex:1 1 340px;}
+.report-donut-block{flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:8px; width:180px;}
+.report-donut{max-width:180px;}
+.report-grid-2 .chart-box{margin-bottom:8px;}
+.report-grid-2 .chart-legend{margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -438,6 +491,35 @@ html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
       <div class="filter-divider"></div>
       <div class="toolbar-search"><input type="text" id="globalSearch" data-i18n-placeholder="globalSearchPlaceholder" placeholder="Search drivers, merchants, areas, cities…"></div>
     </div>
+  </div>
+
+  <!--
+    Comparison Panel (Phase 2). Empty content shell only — dashboard.js's
+    renderComparisonPanel() fills #comparisonBody from comparison.js's
+    buildComparisonData(), which itself only ever compares two aggregates
+    built from filters.js-filtered rows (see comparison.js header note).
+  -->
+  <div class="comparison-panel" id="comparisonPanel">
+    <div class="comparison-header">
+      <button type="button" class="export-btn comparison-toggle-btn" id="comparisonToggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3L4 7l4 4M4 7h13a4 4 0 014 4v1M16 21l4-4-4-4M20 17H7a4 4 0 01-4-4v-1"/></svg>
+        <span id="comparisonToggleLabel"></span>
+      </button>
+      <div class="comparison-periods hidden" id="comparisonPeriods">
+        <div class="comparison-period-block">
+          <span class="comparison-period-tag" data-i18n="comparisonCurrentPeriod">Current Period</span>
+          <span class="comparison-period-value" id="comparisonPeriodALabel"></span>
+        </div>
+        <span class="comparison-vs">vs</span>
+        <div class="comparison-period-block">
+          <span class="comparison-period-tag" data-i18n="comparisonComparePeriod">Compare With</span>
+          <select id="comparisonFromSelect" class="comparison-select"></select>
+          <span class="comparison-arrow">→</span>
+          <select id="comparisonToSelect" class="comparison-select"></select>
+        </div>
+      </div>
+    </div>
+    <div class="comparison-body hidden" id="comparisonBody"></div>
   </div>
 
   <div class="kpi-row" id="kpiRow"></div>
@@ -617,6 +699,7 @@ html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
 <script src="filters.js"></script>
 <script src="aggregations.js"></script>
 <script src="filter-ui.js"></script>
+<script src="comparison.js"></script>
 <script src="reportData.js"></script>
 <script src="reportPreview.js"></script>
 <script src="dashboard.js"></script>

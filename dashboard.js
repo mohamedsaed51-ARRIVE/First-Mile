@@ -99,7 +99,8 @@ const CONFIG = window.ARRIVE_CONFIG || {};
   function resetInteractiveNodes(){
     ['periodFromDate','periodToDate','globalSearch','driverSearch','merchantSearch','areaGlobalSearch',
      'driverTableSearch','areaTableSearch','clientTableSearch','resetBtn','exportBtn',
-     'reportBtn','reportOverlay','reportCloseBtn'].forEach(id=>{
+     'reportBtn','reportOverlay','reportCloseBtn',
+     'comparisonToggle','comparisonFromSelect','comparisonToSelect'].forEach(id=>{
       const el = document.getElementById(id);
       if(el){ const clone = el.cloneNode(true); el.parentNode.replaceChild(clone, el); }
     });
@@ -119,7 +120,8 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         types: Array.from(s.types), statuses: Array.from(s.statuses),
         drivers: Array.from(s.drivers), clients: Array.from(s.clients), reasons: Array.from(s.reasons),
         feesMode: s.feesMode,
-        globalQuery: s.globalQuery, driverQuery: s.driverQuery, clientQuery: s.clientQuery, areaQuery: s.areaQuery
+        globalQuery: s.globalQuery, driverQuery: s.driverQuery, clientQuery: s.clientQuery, areaQuery: s.areaQuery,
+        comparisonMode: s.comparisonMode, comparisonPeriodB: { monthFrom: s.comparisonPeriodB.monthFrom, monthTo: s.comparisonPeriodB.monthTo }
       } : null;
       resetInteractiveNodes();
       if(filterSnapshot){
@@ -161,7 +163,14 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       // table-local (unrelated to Phase 1; unchanged since Phase 0)
       driverSort:{key:'count', dir:-1}, driverTableFilter:'', driverPage:1, driverPageSize:12,
       areaSort:{key:'count', dir:-1}, areaTableFilter:'', areaPage:1, areaPageSize:12,
-      clientSort:{key:'count', dir:-1}, clientTableFilter:'', clientPage:1, clientPageSize:12
+      clientSort:{key:'count', dir:-1}, clientTableFilter:'', clientPage:1, clientPageSize:12,
+      // Phase 2: comparison mode. Off by default — the normal dashboard
+      // is completely unaffected until the user turns this on. Period A
+      // is NOT stored separately here — it's always whatever the normal
+      // filters above currently show (monthFrom/monthTo or
+      // periodMode/selectedMonths); only Period B needs its own state.
+      comparisonMode: false,
+      comparisonPeriodB: { monthFrom: Math.max(0, months.length-2), monthTo: Math.max(0, months.length-2) }
     };
     if(filterSnapshot){
       state.periodMode = filterSnapshot.periodMode || 'range';
@@ -188,6 +197,12 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       state.driverQuery = filterSnapshot.driverQuery || '';
       state.clientQuery = filterSnapshot.clientQuery || '';
       state.areaQuery = filterSnapshot.areaQuery || '';
+      state.comparisonMode = !!filterSnapshot.comparisonMode;
+      if(filterSnapshot.comparisonPeriodB){
+        state.comparisonPeriodB.monthFrom = Math.min(filterSnapshot.comparisonPeriodB.monthFrom, months.length-1);
+        state.comparisonPeriodB.monthTo = Math.min(filterSnapshot.comparisonPeriodB.monthTo, months.length-1);
+        if(state.comparisonPeriodB.monthFrom > state.comparisonPeriodB.monthTo) state.comparisonPeriodB.monthFrom = state.comparisonPeriodB.monthTo;
+      }
     }
     window.__dashboardState = state;
 
@@ -253,8 +268,13 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // unrelated to the Phase 1 filter panel) reuses that cache instead
     // of recomputing it, exactly like the KPIs/charts/summary do.
     let cachedAgg = null;
-    function computeAggregates(){
-      const fr = filteredRows();
+    // Pure: aggregates an arbitrary row set into the full per-dimension
+    // shape (driverAgg/areaAgg/clientAgg/reasonAgg/cityAgg/typeAgg/
+    // branchAgg + totals). No filtering happens here — the caller
+    // decides which rows go in. Reused by computeAggregates() (current
+    // filters) AND by the Phase 2 Comparison Engine (Period A / Period B)
+    // so there is exactly one aggregation implementation, not two.
+    function buildFullAggregate(fr){
       const driverAgg = {}, areaAgg = {}, clientAgg = {}, reasonAgg = {}, cityAgg = {}, typeAgg = {}, branchAgg = {};
       const driverSet = new Set(), citySet = new Set();
       let total=0, done=0, fail=0, fees=0;
@@ -276,7 +296,11 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         const br = driverBranch[di];
         if(br){ branchAgg[br]=(branchAgg[br]||0)+count; }
       });
-      cachedAgg = { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, driverSet, citySet };
+      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, driverSet, citySet };
+    }
+
+    function computeAggregates(){
+      cachedAgg = buildFullAggregate(filteredRows());
       return cachedAgg;
     }
 
@@ -361,10 +385,17 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
       renderTables();
 
+      // Phase 2: computed once per render (a no-op when Comparison Mode
+      // is off), then reused for both the comparison panel and — if
+      // open — the Management Report, instead of recomputing Period B
+      // twice.
+      const comparisonData = computeComparisonBundle(agg);
+      renderComparisonPanel(comparisonData);
+
       // PHASE 1 report: if the Management Report is open, refresh it with
       // this exact agg — same object the dashboard just rendered from, no
       // independent filtering. If it's closed, this is a no-op.
-      reportPreview.refreshIfOpen(reportBuilder.buildManagementReportData(agg, state));
+      reportPreview.refreshIfOpen(reportBuilder.buildManagementReportData(agg, state, comparisonData));
     }
 
     // PHASE 1 perf: table-local interactions (search/sort/pagination on
@@ -585,6 +616,125 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // header comment for why this guarantees no independent filtering).
     // insightsEngine reuses the dashboard's own pure compute*() functions
     // instead of a second copy of that logic.
+    // Phase 2: the comparison engine — see comparison.js. Reuses the SAME
+    // thresholds as the Management Report's driver/city qualification
+    // logic (not a new, separately-invented set of numbers).
+    const comparisonEngine = DashboardComparison.createComparisonEngine({
+      lookups: { cities, areas, drivers, types, reasons },
+      thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
+      t, typeLabel, monthLabel, fmtNum, fmtCurrency
+    });
+
+    function describeCurrentPeriod(){
+      if(state.periodMode==='multi'){
+        return state.selectedMonths.size===months.length ? t('allSelected') : `${state.selectedMonths.size}/${months.length} ${t('periodMonthsLabel')}`;
+      }
+      if(state.monthFrom===0 && state.monthTo===months.length-1) return t('allSelected');
+      return state.monthFrom===state.monthTo ? monthLabel(months[state.monthFrom]) : `${monthLabel(months[state.monthFrom])} → ${monthLabel(months[state.monthTo])}`;
+    }
+    function describePeriodB(){
+      const b = state.comparisonPeriodB;
+      return b.monthFrom===b.monthTo ? monthLabel(months[b.monthFrom]) : `${monthLabel(months[b.monthFrom])} → ${monthLabel(months[b.monthTo])}`;
+    }
+
+    // Computes the full comparison bundle. Period A reuses the aggregate
+    // the normal render pipeline already built (aggA) — zero extra scan.
+    // Period B is exactly one filter pass + one aggregate pass, and only
+    // ever runs when Comparison Mode is actually on (edge case: Mode OFF
+    // costs nothing extra, per the perf requirement).
+    function computeComparisonBundle(aggA){
+      if(!state.comparisonMode) return null;
+      const frB = filterEngine.filterRowsByMonthRange(state, state.comparisonPeriodB.monthFrom, state.comparisonPeriodB.monthTo);
+      const aggB = buildFullAggregate(frB);
+      return comparisonEngine.buildComparisonData(aggA, aggB, describeCurrentPeriod(), describePeriodB());
+    }
+
+    function arrowFor(dir){ return dir==='improved' ? '↑' : dir==='declined' ? '↓' : '→'; }
+    function onlyInBadge(onlyIn){
+      if(onlyIn==='current') return `<span class="comparison-onlyin-badge">${esc(t('comparisonOnlyInCurrent'))}</span>`;
+      if(onlyIn==='previous') return `<span class="comparison-onlyin-badge">${esc(t('comparisonOnlyInPrevious'))}</span>`;
+      return '';
+    }
+    function comparisonDimTable(title, rows, cols){
+      if(rows.length===0) return `<div class="comparison-section"><div class="comparison-section-title">${esc(title)}</div><div class="empty-state">${esc(t('comparisonNoData'))}</div></div>`;
+      return `<div class="comparison-section"><div class="comparison-section-title">${esc(title)}</div><div class="comparison-table-scroll"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div></div>`;
+    }
+
+    // Renders the comparison panel's toggle/period controls (always) and
+    // its body content (only meaningful when Comparison Mode is on).
+    // Called every renderAll() so it stays in sync with language toggles
+    // and background refreshes, same as the rest of the dashboard.
+    function renderComparisonPanel(cmp){
+      const toggleBtn = document.getElementById('comparisonToggle');
+      document.getElementById('comparisonToggleLabel').textContent = `${t('comparisonLabel')}: ${state.comparisonMode?t('comparisonOn'):t('comparisonOff')}`;
+      toggleBtn.classList.toggle('on', state.comparisonMode);
+      document.getElementById('comparisonPeriods').classList.toggle('hidden', !state.comparisonMode);
+      document.getElementById('comparisonPeriodALabel').textContent = describeCurrentPeriod();
+
+      const fromSel = document.getElementById('comparisonFromSelect');
+      const toSel = document.getElementById('comparisonToSelect');
+      fromSel.innerHTML=''; toSel.innerHTML='';
+      months.forEach((m,i)=>{ const l=monthLabel(m); fromSel.appendChild(new Option(l,i)); toSel.appendChild(new Option(l,i)); });
+      fromSel.value = state.comparisonPeriodB.monthFrom;
+      toSel.value = state.comparisonPeriodB.monthTo;
+
+      const bodyEl = document.getElementById('comparisonBody');
+      bodyEl.classList.toggle('hidden', !state.comparisonMode);
+      if(!state.comparisonMode || !cmp){ bodyEl.innerHTML=''; return; }
+
+      const hasAnyData = cmp.kpis.some(k=>k.current>0||k.previous>0) || cmp.cities.length || cmp.areas.length || cmp.drivers.length || cmp.reasons.length || cmp.requestTypes.length;
+      if(!hasAnyData){ bodyEl.innerHTML = `<div class="empty-state">${esc(t('comparisonNoData'))}</div>`; return; }
+
+      const kpiCards = cmp.kpis.map(k=>`
+        <div class="comparison-kpi">
+          <div class="comparison-kpi-label">${esc(k.label)}</div>
+          <div class="comparison-kpi-values">
+            <span class="comparison-kpi-current">${k.currentLabel}</span>
+            <span class="comparison-kpi-previous">${esc(t('comparisonPreviousCol'))}: ${k.previousLabel}</span>
+          </div>
+          <div class="comparison-kpi-change ${k.direction}">${arrowFor(k.direction)} ${k.changeLabel} (${k.pctLabel})</div>
+        </div>`).join('');
+
+      const cityRows = cmp.cities.map(c=>`<tr><td>${esc(c.name)}${onlyInBadge(c.onlyIn)}</td><td class="num">${fmtNum(c.current)}</td><td class="num">${fmtNum(c.previous)}</td><td class="num">${c.change>=0?'+':''}${fmtNum(c.change)}</td><td class="num">${comparisonEngine.pctLabel(c.pct)}</td></tr>`);
+      const areaRows = cmp.areas.map(a=>`<tr><td>${esc(a.name)}${onlyInBadge(a.onlyIn)}</td><td class="num">${fmtNum(a.current)}</td><td class="num">${fmtNum(a.previous)}</td><td class="num">${a.change>=0?'+':''}${fmtNum(a.change)}</td><td class="num">${comparisonEngine.pctLabel(a.pct)}</td></tr>`);
+      const driverRows = cmp.drivers.map(d=>`<tr><td>${esc(d.name)}${onlyInBadge(d.onlyIn)}</td><td class="num">${fmtNum(d.current)}</td><td class="num">${fmtNum(d.previous)}</td><td class="num">${d.change>=0?'+':''}${fmtNum(d.change)}</td>
+        <td class="num">${d.currentRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.currentRate.toFixed(1)+'%'}</td>
+        <td class="num">${d.previousRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.previousRate.toFixed(1)+'%'}</td>
+        <td class="num">${d.rateChange===null?'—':(d.rateChange>=0?'+':'')+d.rateChange.toFixed(1)+' pts'}</td></tr>`);
+      const reasonRows = cmp.reasons.map(r=>`<tr><td>${esc(r.name)}${onlyInBadge(r.onlyIn)}</td><td class="num">${fmtNum(r.current)}</td><td class="num">${fmtNum(r.previous)}</td><td class="num">${r.change>=0?'+':''}${fmtNum(r.change)}</td><td class="num">${comparisonEngine.pctLabel(r.pct)}</td></tr>`);
+      const typeRows = cmp.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}${onlyInBadge(tp.onlyIn)}</td><td class="num">${fmtNum(tp.current)}</td><td class="num">${fmtNum(tp.previous)}</td><td class="num">${tp.change>=0?'+':''}${fmtNum(tp.change)}</td><td class="num">${comparisonEngine.pctLabel(tp.pct)}</td></tr>`);
+
+      const insightsHtml = cmp.insights.length===0 ? `<div class="empty-state">${esc(t('comparisonNoData'))}</div>` :
+        `<div class="comparison-insight-list">${cmp.insights.map(txt=>`<div class="comparison-insight-item">${txt}</div>`).join('')}</div>`;
+
+      bodyEl.innerHTML = `
+        <div class="comparison-section">
+          <div class="comparison-section-title">${esc(t('comparisonKpiTitle'))}</div>
+          <div class="comparison-kpis">${kpiCards}</div>
+        </div>
+        ${comparisonDimTable(t('comparisonCityTitle'), cityRows, [t('cityLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        ${comparisonDimTable(t('comparisonAreaTitle'), areaRows, [t('areaFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        ${comparisonDimTable(t('comparisonDriverTitle'), driverRows, [t('driverFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('kpiSuccessRate')+' ('+t('comparisonCurrentCol')+')', t('kpiSuccessRate')+' ('+t('comparisonPreviousCol')+')', t('comparisonChangeCol')])}
+        ${comparisonDimTable(t('comparisonReasonTitle'), reasonRows, [t('reasonFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        ${comparisonDimTable(t('comparisonTypeTitle'), typeRows, [t('requestTypeLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        <div class="comparison-section">
+          <div class="comparison-section-title">${esc(t('comparisonInsightsTitle'))}</div>
+          ${insightsHtml}
+        </div>`;
+    }
+
+    document.getElementById('comparisonToggle').addEventListener('click', ()=>{ state.comparisonMode=!state.comparisonMode; renderAll(); });
+    document.getElementById('comparisonFromSelect').addEventListener('change', (e)=>{
+      state.comparisonPeriodB.monthFrom=+e.target.value;
+      if(state.comparisonPeriodB.monthFrom>state.comparisonPeriodB.monthTo) state.comparisonPeriodB.monthTo=state.comparisonPeriodB.monthFrom;
+      renderAll();
+    });
+    document.getElementById('comparisonToSelect').addEventListener('change', (e)=>{
+      state.comparisonPeriodB.monthTo=+e.target.value;
+      if(state.comparisonPeriodB.monthTo<state.comparisonPeriodB.monthFrom) state.comparisonPeriodB.monthFrom=state.comparisonPeriodB.monthTo;
+      renderAll();
+    });
+
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
       meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
@@ -593,11 +743,11 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     });
     const reportPreview = DashboardReportPreview.createReportPreview({
       overlayId:'reportOverlay', closeBtnId:'reportCloseBtn', bodyId:'reportBody', generatedLabelId:'reportGeneratedLabel',
-      t, esc, fmtNum, fmtCurrency, rateClass
+      t, esc, fmtNum, fmtCurrency, rateClass, charts: __charts
     });
     document.getElementById('reportBtn').addEventListener('click', ()=>{
       const agg = cachedAgg || computeAggregates();
-      reportPreview.show(reportBuilder.buildManagementReportData(agg, state));
+      reportPreview.show(reportBuilder.buildManagementReportData(agg, state, computeComparisonBundle(agg)));
     });
 
     window.__dashboardRender = renderAll;

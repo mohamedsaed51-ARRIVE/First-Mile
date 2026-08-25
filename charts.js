@@ -100,7 +100,63 @@ window.DashboardCharts = (function(){
       container.appendChild(svg);
     }
 
-    return { svgEl, niceMax, renderComboChart, renderHStackedBar, renderHBar, renderDonut };
+    // Phase 3: grouped vertical bars — two series per category (e.g.
+    // Current vs Previous counts for the Comparison section). Same
+    // conventions as renderComboChart (grid, category labels, tooltips).
+    function renderGroupedBar(containerId, labels, seriesA, seriesB, colorA, colorB){
+      const container=document.getElementById(containerId); container.innerHTML='';
+      const W=700,H=280, marginL=50,marginR=20,marginT=16,marginB=34, plotW=W-marginL-marginR, plotH=H-marginT-marginB, n=labels.length;
+      const svg=svgEl('svg',{viewBox:`0 0 ${W} ${H}`, preserveAspectRatio:'xMidYMid meet'});
+      if(n===0){ const tx=svgEl('text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axis-label'}); tx.textContent=t('noDataFilters'); svg.appendChild(tx); container.appendChild(svg); return; }
+      const maxV = niceMax(Math.max(...seriesA,...seriesB,1));
+      for(let g=0; g<=4; g++){ const val=maxV*g/4; const y=marginT+plotH-(val/maxV)*plotH;
+        svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:y,y2:y,class:'grid-line'}));
+        const lbl=svgEl('text',{x:marginL-8,y:y+3,'text-anchor':'end',class:'axis-label'}); lbl.textContent=fmtNum(val); svg.appendChild(lbl); }
+      const bandW=plotW/n, barW=Math.min(bandW*0.32,28), gap=4;
+      labels.forEach((lab,i)=>{
+        const bandCx=marginL+bandW*i+bandW/2, baseY=marginT+plotH;
+        const aH=(seriesA[i]/maxV)*plotH, bH=(seriesB[i]/maxV)*plotH;
+        const aX=bandCx-barW-gap/2, bX=bandCx+gap/2;
+        const r1=svgEl('rect',{x:aX,y:baseY-aH,width:barW,height:Math.max(aH,0),fill:colorA,rx:3});
+        const t1=svgEl('title',{}); t1.textContent=`${lab}: ${fmtNum(seriesA[i])}`; r1.appendChild(t1); svg.appendChild(r1);
+        const r2=svgEl('rect',{x:bX,y:baseY-bH,width:barW,height:Math.max(bH,0),fill:colorB,rx:3});
+        const t2=svgEl('title',{}); t2.textContent=`${lab}: ${fmtNum(seriesB[i])}`; r2.appendChild(t2); svg.appendChild(r2);
+        const xl=svgEl('text',{x:bandCx,y:H-marginB+18,'text-anchor':'middle',class:'cat-label'}); xl.textContent=lab; svg.appendChild(xl);
+      });
+      svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:marginT+plotH,y2:marginT+plotH,stroke:'#DEE3DA','stroke-width':1}));
+      container.appendChild(svg);
+    }
+
+    // Phase 3: horizontal diverging bars centered on zero — for signed
+    // values (e.g. % change per city/area). Positive bars extend right
+    // in one color, negative bars extend left in another; value labels
+    // sit at a single fixed position (chart's right edge) regardless of
+    // sign, so a large negative bar's label can never collide with the
+    // category labels on the left.
+    function renderDivergingBar(containerId, labels, values, positiveColor, negativeColor){
+      const container=document.getElementById(containerId); container.innerHTML='';
+      const n=labels.length, rowH=26, marginL=140, marginR=55, marginT=8, marginB=8, W=620, plotH=n*rowH, H=plotH+marginT+marginB, plotW=W-marginL-marginR;
+      const svg=svgEl('svg',{viewBox:`0 0 ${W} ${Math.max(H,40)}`, preserveAspectRatio:'xMidYMid meet'});
+      if(n===0){ const tx=svgEl('text',{x:W/2,y:24,'text-anchor':'middle',class:'axis-label'}); tx.textContent=t('noDataFilters'); svg.appendChild(tx); container.appendChild(svg); return; }
+      const maxAbs = niceMax(Math.max(...values.map(v=>Math.abs(v)),1));
+      const cx = marginL + plotW/2, halfW = plotW/2;
+      svg.appendChild(svgEl('line',{x1:cx,x2:cx,y1:marginT,y2:marginT+plotH,stroke:'#DEE3DA','stroke-width':1}));
+      labels.forEach((lab,i)=>{
+        const cy=marginT+rowH*i+rowH/2, barH=14;
+        const v = values[i];
+        const w = (Math.abs(v)/maxAbs)*halfW;
+        const isPos = v>=0;
+        const x = isPos ? cx : cx-w;
+        const color = isPos?positiveColor:negativeColor;
+        const lbl=svgEl('text',{x:marginL-10,y:cy+4,'text-anchor':'end',class:'cat-label'}); lbl.textContent=lab; svg.appendChild(lbl);
+        const r=svgEl('rect',{x, y:cy-barH/2, width:Math.max(w,0), height:barH, fill:color, rx:3});
+        const tt=svgEl('title',{}); tt.textContent=`${lab}: ${v>=0?'+':''}${v.toFixed(1)}%`; r.appendChild(tt); svg.appendChild(r);
+        const vLbl=svgEl('text',{x:W-marginR+8, y:cy+4, 'text-anchor':'start', class:'bar-value'}); vLbl.textContent=`${v>=0?'+':''}${v.toFixed(1)}%`; svg.appendChild(vLbl);
+      });
+      container.appendChild(svg);
+    }
+
+    return { svgEl, niceMax, renderComboChart, renderHStackedBar, renderHBar, renderDonut, renderGroupedBar, renderDivergingBar };
   }
 
   return { createCharts };

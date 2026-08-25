@@ -15,9 +15,12 @@ window.DashboardReportPreview = (function(){
    * createReportPreview(deps) — deps:
    *   overlayId, closeBtnId, bodyId, generatedLabelId: DOM ids (see index.html)
    *   t, esc, fmtNum, fmtCurrency, rateClass: i18n/formatting helpers
+   *   charts: a DashboardCharts.createCharts(...) instance (Phase 3) — the
+   *     SAME chart-drawing functions the main dashboard uses, reused here
+   *     rather than re-implemented for the report.
    */
   function createReportPreview(deps){
-    const { overlayId, closeBtnId, bodyId, generatedLabelId, t, esc, fmtNum, fmtCurrency, rateClass } = deps;
+    const { overlayId, closeBtnId, bodyId, generatedLabelId, t, esc, fmtNum, fmtCurrency, rateClass, charts } = deps;
     const overlay = document.getElementById(overlayId);
     const body = document.getElementById(bodyId);
     const generatedLabel = document.getElementById(generatedLabelId);
@@ -57,8 +60,14 @@ window.DashboardReportPreview = (function(){
       ];
       return `<div class="report-section">
         <div class="report-section-title">${esc(t('reportExecutiveSummary'))}</div>
-        <div class="report-kpis">
-          ${cards.map(([label,val])=>`<div class="report-kpi"><div class="report-kpi-label">${esc(label)}</div><div class="report-kpi-value">${esc(val)}</div></div>`).join('')}
+        <div class="report-summary-layout">
+          <div class="report-kpis">
+            ${cards.map(([label,val])=>`<div class="report-kpi"><div class="report-kpi-label">${esc(label)}</div><div class="report-kpi-value">${esc(val)}</div></div>`).join('')}
+          </div>
+          <div class="report-donut-block">
+            <div class="chart-box report-donut" id="reportSummaryDonut"></div>
+            <div class="chart-legend" id="reportSummaryDonutLegend"></div>
+          </div>
         </div>
       </div>`;
     }
@@ -79,11 +88,18 @@ window.DashboardReportPreview = (function(){
       return `<div class="report-section">
         <div class="report-section-title">${esc(t('reportPerformanceAnalysis'))}</div>
         <div class="report-grid-2">
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>${table([t('cityLabel'),t('requestsHeader'),t('successHeader'),t('extraFeesHeader')], cityRows)}</div>
+          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>
+            <div class="chart-box" id="reportCityChart"></div>
+            <div class="chart-legend"><span><i style="background:#0F7A6C"></i><span>${esc(t('doneLegend'))}</span></span><span><i style="background:#C1432E"></i><span>${esc(t('failLegend'))}</span></span></div>
+            ${table([t('cityLabel'),t('requestsHeader'),t('successHeader'),t('extraFeesHeader')], cityRows)}</div>
           <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportAreaPerformance'))}</div></div>${table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows)}</div>
           <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportDriverPerformance'))}</div></div>${table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows)}</div>
           <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportStatusBreakdown'))}</div></div>${table([t('statusLabel'),t('requestsHeader'),'%'], statusRows)}</div>
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportTypeBreakdown'))}</div></div>${table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows)}</div>
+          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportTypeBreakdown'))}</div></div>
+            <div class="report-donut-block"><div class="chart-box report-donut" id="reportTypeChart"></div><div class="chart-legend" id="reportTypeChartLegend"></div></div>
+            ${table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows)}</div>
+          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportReasonBreakdown'))}</div></div>
+            <div class="chart-box" id="reportReasonChart"></div></div>
         </div>
       </div>`;
     }
@@ -125,6 +141,112 @@ window.DashboardReportPreview = (function(){
       </div>`;
     }
 
+    // Phase 2: pct is a raw number or null (comparison.js never returns
+    // NaN/Infinity) — this only turns it into a display string.
+    function pctLabel(p){ return p===null ? t('reportNA') : (p>=0?'+':'')+p.toFixed(1)+'%'; }
+    function onlyInBadge(onlyIn){
+      if(onlyIn==='current') return `<span class="comparison-onlyin-badge">${esc(t('comparisonOnlyInCurrent'))}</span>`;
+      if(onlyIn==='previous') return `<span class="comparison-onlyin-badge">${esc(t('comparisonOnlyInPrevious'))}</span>`;
+      return '';
+    }
+    function arrowFor(dir){ return dir==='improved' ? '↑' : dir==='declined' ? '↓' : '→'; }
+
+    function renderComparisonSection(cmp){
+      if(!cmp) return '';
+      const kpiCards = cmp.kpis.map(k=>`
+        <div class="comparison-kpi">
+          <div class="comparison-kpi-label">${esc(k.label)}</div>
+          <div class="comparison-kpi-values"><span class="comparison-kpi-current">${k.currentLabel}</span><span class="comparison-kpi-previous">${esc(t('comparisonPreviousCol'))}: ${k.previousLabel}</span></div>
+          <div class="comparison-kpi-change ${k.direction}">${arrowFor(k.direction)} ${k.changeLabel} (${k.pctLabel})</div>
+        </div>`).join('');
+
+      const dimTable = (title, rows, cols) => rows.length===0
+        ? `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div><div class="empty-state">${esc(t('comparisonNoData'))}</div></div>`
+        : `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div><div class="comparison-table-scroll">${table(cols, rows)}</div></div>`;
+
+      const cityRows = cmp.cities.map(c=>`<tr><td>${esc(c.name)}${onlyInBadge(c.onlyIn)}</td><td class="num">${fmtNum(c.current)}</td><td class="num">${fmtNum(c.previous)}</td><td class="num">${c.change>=0?'+':''}${fmtNum(c.change)}</td><td class="num">${pctLabel(c.pct)}</td></tr>`);
+      const areaRows = cmp.areas.map(a=>`<tr><td>${esc(a.name)}${onlyInBadge(a.onlyIn)}</td><td class="num">${fmtNum(a.current)}</td><td class="num">${fmtNum(a.previous)}</td><td class="num">${a.change>=0?'+':''}${fmtNum(a.change)}</td><td class="num">${pctLabel(a.pct)}</td></tr>`);
+      const driverRows = cmp.drivers.map(d=>`<tr><td>${esc(d.name)}${onlyInBadge(d.onlyIn)}</td><td class="num">${fmtNum(d.current)}</td><td class="num">${fmtNum(d.previous)}</td>
+        <td class="num">${d.currentRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.currentRate.toFixed(1)+'%'}</td>
+        <td class="num">${d.previousRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.previousRate.toFixed(1)+'%'}</td>
+        <td class="num">${d.rateChange===null?'—':(d.rateChange>=0?'+':'')+d.rateChange.toFixed(1)+' pts'}</td></tr>`);
+      const reasonRows = cmp.reasons.map(r=>`<tr><td>${esc(r.name)}${onlyInBadge(r.onlyIn)}</td><td class="num">${fmtNum(r.current)}</td><td class="num">${fmtNum(r.previous)}</td><td class="num">${r.change>=0?'+':''}${fmtNum(r.change)}</td><td class="num">${pctLabel(r.pct)}</td></tr>`);
+      const typeRows = cmp.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}${onlyInBadge(tp.onlyIn)}</td><td class="num">${fmtNum(tp.current)}</td><td class="num">${fmtNum(tp.previous)}</td><td class="num">${tp.change>=0?'+':''}${fmtNum(tp.change)}</td><td class="num">${pctLabel(tp.pct)}</td></tr>`);
+
+      const insightsHtml = cmp.insights.length===0 ? `<div class="empty-state">${esc(t('comparisonNoData'))}</div>` :
+        `<div class="comparison-insight-list">${cmp.insights.map(txt=>`<div class="comparison-insight-item">${txt}</div>`).join('')}</div>`;
+
+      return `<div class="report-section">
+        <div class="report-section-title">${esc(t('comparisonSummaryTitle'))}</div>
+        <div class="report-scope-item" style="margin-bottom:14px;"><span class="report-scope-label">${esc(t('comparisonCurrentPeriod'))} ${esc(t('comparisonLabel'))} ${esc(t('comparisonComparePeriod'))}</span><span class="report-scope-value">${esc(cmp.periodALabel)} vs ${esc(cmp.periodBLabel)}</span></div>
+        <div class="comparison-kpis" style="margin-bottom:14px;">${kpiCards}</div>
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">${esc(t('comparisonKpiTitle'))}</div></div>
+          <div class="chart-box" id="reportCmpKpiChart"></div>
+          <div class="chart-legend"><span><i style="background:#101B30"></i><span>${esc(t('comparisonCurrentCol'))}</span></span><span><i style="background:#C8912B"></i><span>${esc(t('comparisonPreviousCol'))}</span></span></div>
+        </div>
+        ${dimTable(t('comparisonCityTitle'), cityRows, [t('cityLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        <div class="panel">
+          <div class="panel-head"><div class="panel-title">${esc(t('comparisonChangePctCol'))} — ${esc(t('comparisonCityTitle'))}</div></div>
+          <div class="chart-box" id="reportCmpCityChart"></div>
+          <div class="chart-legend"><span><i style="background:#0F7A6C"></i><span>${esc(t('comparisonImproved'))}</span></span><span><i style="background:#C1432E"></i><span>${esc(t('comparisonDeclined'))}</span></span></div>
+        </div>
+        ${dimTable(t('comparisonAreaTitle'), areaRows, [t('areaFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        ${dimTable(t('comparisonDriverTitle'), driverRows, [t('driverFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('kpiSuccessRate')+' ('+t('comparisonCurrentCol')+')', t('kpiSuccessRate')+' ('+t('comparisonPreviousCol')+')', t('comparisonChangeCol')])}
+        ${dimTable(t('comparisonReasonTitle'), reasonRows, [t('reasonFilterLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        ${dimTable(t('comparisonTypeTitle'), typeRows, [t('requestTypeLabel'), t('comparisonCurrentCol'), t('comparisonPreviousCol'), t('comparisonChangeCol'), t('comparisonChangePctCol')])}
+        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('comparisonInsightsTitle'))}</div></div>${insightsHtml}</div>
+      </div>`;
+    }
+
+    // Phase 3: populates every chart container with the SAME chart-drawing
+    // functions the main dashboard uses (see charts.js) — must run AFTER
+    // body.innerHTML is set, since these functions manipulate real DOM
+    // nodes via getElementById/appendChild, not string templates. Every
+    // labels/values array here is a direct reshaping of numbers reportData.js
+    // (and comparison.js, for the comparison charts) already computed —
+    // no new aggregation or filtering happens in this function.
+    const TYPE_COLORS = ['#C8912B','#0F7A6C','#101B30','#C1432E'];
+    function renderCharts(data){
+      if(!charts) return;
+
+      // Executive Summary: Done vs Fail donut
+      if(document.getElementById('reportSummaryDonut')){
+        charts.renderDonut('reportSummaryDonut', 'reportSummaryDonutLegend',
+          [t('doneLegend'), t('failLegend')],
+          [data.summary.successfulRequests, data.summary.failedRequests],
+          ['#0F7A6C', '#C1432E']);
+      }
+
+      // Performance Analysis: City done/fail stacked bar (top 8 by volume)
+      if(document.getElementById('reportCityChart')){
+        const topCities = data.performance.cities.slice(0,8);
+        charts.renderHStackedBar('reportCityChart', topCities.map(c=>c.name), topCities.map(c=>c.done), topCities.map(c=>c.fail));
+      }
+      // Request Type donut
+      if(document.getElementById('reportTypeChart')){
+        const types = data.performance.requestTypes;
+        charts.renderDonut('reportTypeChart', 'reportTypeChartLegend', types.map(tp=>tp.name), types.map(tp=>tp.total), TYPE_COLORS);
+      }
+      // Failure reasons — top 8 by volume
+      if(document.getElementById('reportReasonChart')){
+        const topReasons = data.performance.reasons.slice(0,8);
+        charts.renderHBar('reportReasonChart', topReasons.map(r=>r.name), topReasons.map(r=>r.total), '#C1432E');
+      }
+
+      // Comparison (only present when Comparison Mode is on)
+      if(data.comparison){
+        if(document.getElementById('reportCmpKpiChart')){
+          const countKpis = data.comparison.kpis.filter(k=>['totalRequests','successfulRequests','failedRequests'].includes(k.key));
+          charts.renderGroupedBar('reportCmpKpiChart', countKpis.map(k=>k.label), countKpis.map(k=>k.current), countKpis.map(k=>k.previous), '#101B30', '#C8912B');
+        }
+        if(document.getElementById('reportCmpCityChart')){
+          const topChangeCities = data.comparison.cities.filter(c=>c.pct!==null).slice().sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)).slice(0,10);
+          charts.renderDivergingBar('reportCmpCityChart', topChangeCities.map(c=>c.name), topChangeCities.map(c=>c.pct), '#0F7A6C', '#C1432E');
+        }
+      }
+    }
+
     function render(data){
       lastData = data;
       generatedLabel.textContent = t('reportGeneratedOn',{date: data.generatedAt.toLocaleString()});
@@ -132,10 +254,12 @@ window.DashboardReportPreview = (function(){
         renderScope(data.scope),
         renderSummary(data.summary),
         renderPerformance(data.performance),
+        renderComparisonSection(data.comparison),
         renderAttention(data.attention),
         renderInsightsRecs(data.insights, data.recommendations),
         renderDetailedTables(data.performance)
       ].join('');
+      renderCharts(data);
     }
 
     function show(data){
