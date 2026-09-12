@@ -328,7 +328,12 @@ body.report-open{overflow:hidden;}
 html[dir="rtl"] .report-generated{font-family:var(--font-body-ar); font-weight:600;}
 .report-close{background:var(--paper); border:1px solid var(--line); border-radius:8px; width:32px; height:32px; cursor:pointer; color:var(--ink-soft); font-size:14px; line-height:1;}
 .report-close:hover{border-color:var(--gold); color:var(--navy);}
+.report-export-btn{display:flex; align-items:center; gap:6px; background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:7px 14px; font-size:12.5px; font-weight:700; color:var(--ink-soft); cursor:pointer; white-space:nowrap; font-family:inherit;}
+.report-export-btn:hover{border-color:var(--gold); color:var(--navy);}
+.report-export-btn svg{width:13px; height:13px;}
+html[dir="rtl"] .report-export-btn{font-family:var(--font-body-ar);}
 .report-body{padding:22px 26px 30px;}
+.report-print-footer{display:none;}
 .report-section{margin-bottom:26px;}
 .report-section-title{font-family:var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--gold); font-weight:700; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--line);}
 html[dir="rtl"] .report-section-title{font-family:var(--font-body-ar);}
@@ -356,11 +361,54 @@ html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
 .report-insight-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; margin-bottom:14px;}
 .report-rec-list{display:flex; flex-direction:column; gap:8px;}
 
+/* ---- Phase 4: A4 report print pipeline (native browser print, no
+   canvas/screenshot rendering — real HTML text + real SVG charts) ---- */
+@page{
+  size: A4 portrait;
+  margin: 14mm 12mm;
+}
 @media print{
+  html, body{background:#fff !important;}
   body > *:not(.report-overlay){display:none !important;}
-  .report-overlay{position:static; background:none; padding:0; overflow:visible;}
-  .report-modal{box-shadow:none; max-width:none;}
-  .report-close, .filters, .kpi-row{display:none !important;}
+  .report-overlay{position:static !important; background:none !important; padding:0 !important; overflow:visible !important; inset:auto !important;}
+  .report-modal{box-shadow:none !important; max-width:none !important; width:auto !important; margin:0 !important; border-radius:0 !important;}
+  .report-header{position:static !important; border-radius:0 !important;}
+  .report-body{padding:0 !important;}
+  .report-close, .report-export-btn, .filters, .kpi-row{display:none !important;}
+
+  /* Report footer: hidden on screen (see .report-print-footer above),
+     shown only for print. */
+  .report-print-footer{display:flex !important; justify-content:space-between; gap:12px;
+    margin-top:18px; padding-top:10px; border-top:1px solid var(--line);
+    font-size:10px; color:var(--ink-faint); font-family:var(--font-mono);}
+  html[dir="rtl"] .report-print-footer{font-family:var(--font-body-ar);}
+
+  /* Layout: single column so nothing gets squeezed into overflow/clipping. */
+  .report-summary-layout{display:block !important;}
+  .report-donut-block{width:140px !important; margin:0 auto 10px;}
+  .report-grid-2{display:block !important;}
+  .report-grid-2 .panel{margin-bottom:14px !important;}
+  .report-kpis{grid-template-columns:repeat(auto-fit, minmax(105px,1fr)) !important; gap:8px !important;}
+
+  /* Tables: repeating headers, no horizontal overflow, readable size. */
+  table{width:100% !important; font-size:10.5px;}
+  thead{display:table-header-group;}
+  tr{page-break-inside:avoid; break-inside:avoid;}
+  .comparison-table-scroll{overflow:visible !important;}
+  .comparison-table-scroll table{min-width:0 !important;}
+
+  /* Keep headings attached to their content and avoid awkward splits. */
+  .report-section{page-break-inside:avoid; break-inside:avoid;}
+  .report-section-title, .panel-title, .panel-head{page-break-after:avoid; break-after:avoid;}
+  .panel, .report-kpi, .comparison-kpi, .insight-card, .rec-item, .report-attention-item{page-break-inside:avoid; break-inside:avoid;}
+
+  /* Charts already use viewBox + width:100%/height:auto (see .chart-box
+     rules above) so they scale to the printed page width automatically —
+     no size overrides needed here. */
+
+  /* Comparison section only ever exists in the DOM when Comparison Mode
+     is ON (renderComparisonSection() in reportPreview.js returns '' when
+     data.comparison is null) — nothing extra to hide/show here for it. */
 }
 /* ---- Phase 2: Comparison Engine ---- */
 .comparison-panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 26px; margin-bottom:16px;}
@@ -667,9 +715,14 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
     <div class="report-header">
       <div class="report-brand"><span class="report-brand-name">ARRIVE</span><span class="report-brand-sub" data-i18n="reportTitle">First Mile Management Report</span></div>
       <div class="report-generated" id="reportGeneratedLabel"></div>
+      <button type="button" class="report-export-btn" id="reportExportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M9 15l3 3 3-3M12 11v7"/></svg><span data-i18n="reportExportBtn">Export PDF</span></button>
       <button type="button" class="report-close" id="reportCloseBtn" aria-label="Close">✕</button>
     </div>
     <div class="report-body" id="reportBody"></div>
+    <div class="report-print-footer">
+      <span data-i18n="reportPrintFooterBrand">ARRIVE — First Mile Management Report</span>
+      <span id="reportPrintFooterGenerated"></span>
+    </div>
   </div>
 </div>
 
@@ -702,6 +755,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
 <script src="comparison.js"></script>
 <script src="reportData.js"></script>
 <script src="reportPreview.js"></script>
+<script src="reportPdf.js"></script>
 <script src="dashboard.js"></script>
 
 </body>

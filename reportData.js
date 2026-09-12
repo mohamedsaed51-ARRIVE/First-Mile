@@ -190,7 +190,12 @@ window.DashboardReport = (function(){
      * No filtering happens in this function — every number already
      * reflects the current filters before it gets here.
      */
-    function buildManagementReportData(agg, state){
+    // Phase 2: comparisonData is the object comparison.js's
+    // buildComparisonData() already produced (or null if Comparison Mode
+    // is off) — this function does not compute or touch it, only carries
+    // it into the report's data shape so reportPreview.js can render a
+    // Comparison section when it's present.
+    function buildManagementReportData(agg, state, comparisonData){
       const scope = buildScope(state);
       const summary = buildSummary(agg);
       const performance = buildPerformance(agg);
@@ -204,7 +209,8 @@ window.DashboardReport = (function(){
         performance,
         attention,
         insights,
-        recommendations
+        recommendations,
+        comparison: comparisonData || null
       };
     }
 

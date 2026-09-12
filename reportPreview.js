@@ -291,7 +291,11 @@ window.DashboardReportPreview = (function(){
       // Re-renders with fresh data if the report is currently open — so a
       // filter change while the report is on screen updates it live,
       // with no need to close and reopen.
-      refreshIfOpen: (data)=>{ if(open) render(data); }
+      refreshIfOpen: (data)=>{ if(open) render(data); },
+      // Phase 4: read-only accessor for the export/print pipeline — returns
+      // the exact same data object last passed to render() (built by
+      // buildManagementReportData). No recomputation happens here.
+      getLastData: ()=>lastData
     };
   }
 

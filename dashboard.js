@@ -99,7 +99,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
   function resetInteractiveNodes(){
     ['periodFromDate','periodToDate','globalSearch','driverSearch','merchantSearch','areaGlobalSearch',
      'driverTableSearch','areaTableSearch','clientTableSearch','resetBtn','exportBtn',
-     'reportBtn','reportOverlay','reportCloseBtn',
+     'reportBtn','reportOverlay','reportCloseBtn','reportExportBtn',
      'comparisonToggle','comparisonFromSelect','comparisonToSelect'].forEach(id=>{
       const el = document.getElementById(id);
       if(el){ const clone = el.cloneNode(true); el.parentNode.replaceChild(clone, el); }
@@ -748,6 +748,13 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     document.getElementById('reportBtn').addEventListener('click', ()=>{
       const agg = cachedAgg || computeAggregates();
       reportPreview.show(reportBuilder.buildManagementReportData(agg, state, computeComparisonBundle(agg)));
+    });
+
+    // Phase 4: export/print pipeline. Reuses reportPreview's own last-
+    // rendered data (getLastData()) — no new filtering/aggregation here.
+    DashboardReportPdf.createReportPdf({
+      exportBtnId:'reportExportBtn', footerGeneratedId:'reportPrintFooterGenerated',
+      generatedLabelId:'reportGeneratedLabel', getLastData: reportPreview.getLastData
     });
 
     window.__dashboardRender = renderAll;
