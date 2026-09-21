@@ -135,7 +135,10 @@ const CONFIG = window.ARRIVE_CONFIG || {};
   }
 
   function initDashboard(DATA){
-    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, driverBranch, salaryRef, meta } = DATA;
+    // Phase 6A (additive): pickupDays is optional — defaults to [] so an
+    // older/cached API response with no pickupDays field never breaks
+    // dashboard load. rows/months/.../meta destructuring is unchanged.
+    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], driverBranch, salaryRef, meta } = DATA;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
     const TYPE_COLORS = ['#C8912B','#0F7A6C','#101B30','#C1432E'];
@@ -241,8 +244,18 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     // PHASE 0D + 1: filteredRows() now delegates to filters.js (the
     // canonical engine); aggregate() is an unrelated pure reduction.
-    const __agg = DashboardAggregations.createAggregations({ state, DONE_IDX, FAIL_IDX, filterEngine });
-    const { filteredRows, aggregate } = __agg;
+    // PHASE 6A (additive): pickupDays passed through so a future Pickup-Day
+    // report/analysis can use it; not consumed by any existing render path.
+    const __agg = DashboardAggregations.createAggregations({ state, DONE_IDX, FAIL_IDX, filterEngine, pickupDays });
+    const { filteredRows, aggregate, filteredPickupDays, computePickupDaysByClient } = __agg;
+    // QA/dev hook only — not called from any render path. Lets pickupDays
+    // be inspected from the browser console (e.g. window.__pickupDaysMeasure
+    // .byClientForCurrentFilters()) without adding any UI.
+    window.__pickupDaysMeasure = {
+      filteredPickupDays,
+      computePickupDaysByClient,
+      byClientForCurrentFilters: ()=> computePickupDaysByClient(filteredPickupDays())
+    };
     function trendHtml(curr, prev, higherIsBetter){
       if(prev===null||prev===undefined||prev===0) return `<span class="trend flat">${t('trendNA')}</span>`;
       const diff=curr-prev, pct=diff/prev*100;

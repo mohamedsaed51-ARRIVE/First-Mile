@@ -343,20 +343,60 @@ html[dir="rtl"] .report-section-title{font-family:var(--font-body-ar);}
 .report-scope-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700;}
 .report-scope-value{color:var(--ink); font-weight:600;}
 
+/* ---- Phase 5: Executive Cover ---- */
+.report-cover{padding:8px 4px 28px; margin-bottom:8px; border-bottom:2px solid var(--navy); text-align:center;}
+.report-cover-brand{font-family:var(--font-mono); font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:700; margin-bottom:8px;}
+.report-cover-subtitle{font-family:var(--font-display); font-size:26px; color:var(--navy); font-weight:700; margin-bottom:18px;}
+html[dir="rtl"] .report-cover-subtitle{font-family:var(--font-body-ar);}
+.report-cover-meta{display:inline-flex; flex-direction:column; gap:6px; text-align:start; min-width:320px;}
+.report-cover-meta-row{display:flex; justify-content:space-between; gap:18px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--line);}
+.report-cover-meta-label{color:var(--ink-faint); text-transform:uppercase; font-size:10.5px; letter-spacing:.06em; font-weight:700; font-family:var(--font-mono); flex:0 0 auto;}
+.report-cover-meta-value{color:var(--ink); font-weight:600; text-align:end;}
+
+/* ---- Phase 5: Management Message ---- */
+.report-mgmt-message{background:var(--gold-soft); border-inline-start:3px solid var(--gold); border-radius:var(--radius-sm); padding:16px 18px;}
+.report-mgmt-message .report-section-title{border-bottom:none; padding-bottom:0; margin-bottom:8px;}
+.report-mgmt-message-list{margin:0; padding-inline-start:20px; display:flex; flex-direction:column; gap:6px;}
+.report-mgmt-message-list li{font-size:13.5px; color:var(--ink); line-height:1.5;}
+
 .report-kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px;}
+.report-kpis-compact{grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); margin-bottom:14px;}
 .report-kpi{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 16px;}
 .report-kpi-label{font-size:11px; color:var(--ink-soft); margin-bottom:6px;}
 .report-kpi-value{font-size:22px; font-weight:700; color:var(--navy); font-family:var(--font-mono);}
 html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
+.report-kpi-delta{margin-top:6px; font-size:11.5px; font-weight:700; font-family:var(--font-mono);}
+.report-kpi-delta.improved{color:var(--teal);}
+.report-kpi-delta.declined{color:var(--rust);}
+.report-kpi-delta.neutral{color:var(--ink-soft);}
 
 .report-grid-2{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:14px;}
 .report-grid-2 .panel{margin-bottom:0;}
+
+/* ---- Phase 5: Best Performers / Areas Requiring Attention ---- */
+.report-best-attention{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;}
+.report-best-attention-col{background:var(--paper); border-radius:var(--radius-sm); padding:14px 16px; border:1px solid var(--line);}
+.report-best-attention-heading{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--line-dash);}
+.report-best-attention-heading.good{color:var(--teal);}
+.report-best-attention-heading.bad{color:var(--rust);}
+.report-best-attention-group{margin-bottom:10px;}
+.report-best-attention-group:last-child{margin-bottom:0;}
+.report-rank-group-title{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:700; margin-bottom:4px;}
+.report-rank-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:3px;}
+.report-rank-list li{display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12.5px; padding:2px 0;}
+.report-rank-name{color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+.report-callout{background:var(--rust-soft); color:var(--rust); font-weight:700; font-size:12.5px; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:14px;}
 
 .report-attention-item{display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px dashed var(--line);}
 .report-attention-item:last-child{border-bottom:none;}
 .report-attention-idx{flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono);}
 .report-attention-label{font-weight:700; color:var(--navy); font-size:13.5px;}
 .report-attention-detail{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+.report-attention-body{display:flex; flex-direction:column; gap:4px; flex:1;}
+.report-attention-issue{font-weight:700; color:var(--navy); font-size:13.5px;}
+.report-attention-evidence{font-size:12.5px; color:var(--ink-soft);}
+.report-attention-kicker{display:inline-block; font-family:var(--font-mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700; margin-inline-end:6px;}
 
 .report-insight-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; margin-bottom:14px;}
 .report-rec-list{display:flex; flex-direction:column; gap:8px;}
@@ -389,6 +429,9 @@ html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
   .report-grid-2{display:block !important;}
   .report-grid-2 .panel{margin-bottom:14px !important;}
   .report-kpis{grid-template-columns:repeat(auto-fit, minmax(105px,1fr)) !important; gap:8px !important;}
+  .report-best-attention{grid-template-columns:1fr 1fr !important;}
+  .report-cover{break-inside:avoid; page-break-inside:avoid;}
+  .report-mgmt-message, .report-best-attention, .report-callout{break-inside:avoid; page-break-inside:avoid;}
 
   /* Tables: repeating headers, no horizontal overflow, readable size. */
   table{width:100% !important; font-size:10.5px;}
@@ -455,6 +498,12 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
 @media (max-width:700px){
   .comparison-header{flex-direction:column; align-items:flex-start;}
   .comparison-periods{width:100%;}
+  .report-best-attention{grid-template-columns:1fr;}
+  .report-cover-meta{min-width:0; width:100%;}
+  .report-cover-meta-row{flex-direction:column; gap:2px;}
+  .report-cover-meta-value{text-align:start;}
+  .report-header{flex-wrap:wrap; row-gap:8px;}
+  .report-export-btn span{display:none;}
 }
 /* ---- Phase 3: report chart layout (reuses .chart-box/.chart-legend/.panel from the dashboard) ---- */
 .report-summary-layout{display:flex; gap:24px; align-items:center; flex-wrap:wrap;}

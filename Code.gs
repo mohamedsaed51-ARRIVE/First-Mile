@@ -1,29 +1,118 @@
 /**
+ * ============================================================================
  * FIRST MILE INTELLIGENCE DASHBOARD — Google Apps Script backend
- * ------------------------------------------------------------------
- * Reads the same 4 sheets used in the source Excel workbook and
- * serves them as one JSON payload, in exactly the schema the
- * dashboard's fetch() call expects.
+ * ============================================================================
+ * Serves one JSON payload (months/cities/areas/drivers/clients/types/
+ * statuses/reasons/rows/pickupDays/driverBranch/salaryRef/meta) to the
+ * dashboard's fetch() call, read live from the Google Sheet. No sheet
+ * structure is changed by this script — it only reads.
  *
- * DEPLOYMENT (one-time):
- * 1. Open your Google Sheet (the live version of First_Mile_tracking_sheet_.xlsx)
- * 2. Extensions -> Apps Script
- * 3. Delete any boilerplate code, paste this whole file in
- * 4. Adjust CONFIG below ONLY if your sheet/tab names differ
- * 5. Deploy -> New deployment -> Type: Web app
- *      - Execute as: Me
- *      - Who has access: Anyone
- * 6. Copy the Web App URL it gives you
- * 7. Paste that URL into CONFIG.APPS_SCRIPT_URL at the top of the
- *    dashboard HTML file's <script> section. That's the ONLY edit
- *    needed on the dashboard side.
+ * -----------------------------------------------------------------------
+ * WHAT WAS WRONG BEFORE (root-cause audit)
+ * -----------------------------------------------------------------------
+ * 1. Header matching was CASE-SENSITIVE and used exact literal strings
+ *    ('Client', 'Requst type', ...). Your sheet has 'client' (lowercase),
+ *    so `findHeaderRow` never found a row containing exact 'Client' and
+ *    threw "Could not locate header row containing: Date, Client, City,
+ *    Area" even though row 2 clearly has all four columns.
+ * 2. Even on sheets where the header row WAS found, individual column
+ *    lookups like `col['Client']` used the same exact-case string. If the
+ *    real header was 'client', `col['Client']` was `undefined`, so every
+ *    row read `row[undefined]` -> `undefined` -> normalized to `null` ->
+ *    the row-skip check (`if (!client) continue;`) silently dropped
+ *    EVERY row. That's why you saw a "successful" response with
+ *    `totalRecords: 0` and empty months/cities/drivers/rows — no error
+ *    was thrown, the sheet was just being read into nothing.
+ * 3. `doGet` had no top-level try/catch. Any thrown error (like #1)
+ *    made Apps Script return its own HTML stack-trace error page instead
+ *    of JSON. The dashboard's `res.json()` then fails to parse HTML as
+ *    JSON, which surfaces in the browser as a generic "Failed to fetch" /
+ *    parse error — even though the server did technically respond.
+ * 4. The 5-minute cache had no guard against caching a broken/empty
+ *    result. Once bug #2 produced an empty payload, that empty payload
+ *    got cached and kept being served for 5 minutes even after you
+ *    thought you'd fixed something.
+ * 5. Date parsing assumed every "Date" cell is already a JS Date object.
+ *    Sheets can hand back numbers (serial dates) or plain strings
+ *    depending on column formatting / how rows were pasted in, and the
+ *    old code silently skipped anything that wasn't already a Date.
  *
- * Whenever the Google Sheet changes, the dashboard reflects it on
- * next page load / refresh — no re-export, no re-upload.
- * ------------------------------------------------------------------
+ * -----------------------------------------------------------------------
+ * WHAT THIS REWRITE DOES ABOUT IT
+ * -----------------------------------------------------------------------
+ * - Column resolution is alias-based, case-insensitive, whitespace-
+ *   normalized, and tolerant of the known "Requst type" misspelling
+ *   (see CONFIG.COLUMN_ALIASES). Every place a column is read uses the
+ *   resolved canonical index (col.client, col.city, ...) — never a
+ *   literal header string — so a casing/spacing mismatch can't silently
+ *   break row reads again.
+ * - Header-row detection scans the first HEADER_SEARCH_ROWS rows,
+ *   explicitly skips fully-blank rows, and if it can't find a row with
+ *   every required column it throws an error that names exactly which
+ *   canonical columns are still missing AND shows the best-matching row
+ *   it found, so a future mismatch is diagnosable in seconds instead of
+ *   guessed at.
+ * - doGet() has a top-level try/catch. Any failure — anywhere — returns
+ *   valid JSON with an `error` field and HTTP 200, never Apps Script's
+ *   default HTML error page. The dashboard already knows how to show
+ *   that error in its own error screen.
+ * - The cache only stores a payload when meta.totalRecords > 0, so a
+ *   broken read can never poison 5 minutes of "empty dashboard".
+ * - Date parsing accepts Date objects, Sheets serial numbers, and
+ *   parseable strings, in that order, before giving up on a row.
+ * - Added ?diagnostic=1 (see below) so header/column detection can be
+ *   verified from a browser tab, without opening the Apps Script editor.
+ *
+ * -----------------------------------------------------------------------
+ * PHASE 6A — pickupDays dataset (added, additive only)
+ * -----------------------------------------------------------------------
+ * - A new, independent dataset `pickupDays` is now built alongside `rows`
+ *   inside readPickupRequest() and returned from buildPayload(). It is
+ *   NOT a replacement for `rows` and does not change how `rows` is
+ *   grouped, indexed, or counted.
+ * - Every row whose request type is "Pickup" (matched case-insensitively,
+ *   so 'Pickup', 'pickup', 'PICKUP', ' Pickup ' all match) AND that has a
+ *   valid parsed date is emitted as its own entry in `pickupDays` — one
+ *   entry per source row, never merged/aggregated across dates. `count`
+ *   is always 1 by design; de-duplicating by client+date is left to the
+ *   frontend / next phase, as required.
+ * - Each `pickupDays` entry reuses the exact same dictionary-encoding
+ *   convention as `rows` (index into months/cities/areas/drivers/types/
+ *   statuses/clients/reasons), with two extra trailing fields appended:
+ *   a literal count of 1, the row's fees, and the row's own date string
+ *   (`YYYY-MM-DD`, from the same fmtDate() already used for dateMin/
+ *   dateMax) — see readPickupRequest() below for the exact shape.
+ * - No existing dictionary, alias table, column-resolution rule, cache
+ *   key, cache behavior, or diagnostic/refresh mode was touched.
+ * -----------------------------------------------------------------------
+ *
+ * DEPLOYMENT
+ * 1. Open your Google Sheet -> Extensions -> Apps Script.
+ * 2. Delete any existing code, paste this whole file in.
+ * 3. Adjust CONFIG below only if your tab names or column headers use
+ *    wording not already covered by COLUMN_ALIASES.
+ * 4. Deploy -> New deployment -> type "Web app".
+ *      Execute as: Me
+ *      Who has access: Anyone
+ *    (NOT "Anyone with Google account" — that requires sign-in and the
+ *    dashboard's fetch() will fail with a CORS/redirect-to-login error.)
+ * 5. Copy the URL. It must end in /exec, not /dev.
+ * 6. Paste it into config.js as APPS_SCRIPT_URL (see SETUP_GUIDE.md).
+ * 7. Sanity check: open ".../exec?diagnostic=1" directly in a browser
+ *    tab. You should see JSON describing exactly which header row and
+ *    columns were detected per sheet, with zero guesswork.
+ * 8. If you ever redeploy (not just "Manage deployments -> Edit" the
+ *    same deployment), Apps Script can issue a NEW URL — update
+ *    config.js again in that case.
+ * 9. If you are redeploying an EXISTING deployment to pick up this
+ *    Phase 6A change: Deploy -> Manage deployments -> pick the active
+ *    deployment -> Edit (pencil icon) -> Version: "New version" ->
+ *    Deploy. Editing the script alone does NOT update the live /exec
+ *    URL's behavior until a new version is deployed to it.
+ * ============================================================================
  */
 
-// ============== CONFIG — only section you should need to touch ==============
+// ============================== CONFIG ======================================
 const CONFIG = {
   SHEET_NAMES: {
     pickup: 'Pickup Request',        // matched by trimmed, case-insensitive prefix
@@ -31,64 +120,239 @@ const CONFIG = {
     courierInfo: 'Courier Data Info',
     courierSalary: 'Courier Salary'
   },
-  CACHE_SECONDS: 300,                // serve cached JSON for 5 min; use ?refresh=1 to bypass
-  HEADER_SEARCH_ROWS: 4              // how many top rows to scan for the real header row
+
+  CACHE_SECONDS: 300,          // serve cached JSON for 5 min; ?refresh=1 bypasses it
+  HEADER_SEARCH_ROWS: 10,      // how many top rows to scan looking for the real header row
+
+  // Canonical column name -> list of acceptable header text variants.
+  // Matching is case-insensitive and whitespace-normalized (so "Requst
+  // type", "requst  type", " REQUST TYPE " all match the same alias).
+  // Add more variants here if a sheet ever uses different wording —
+  // this is the ONLY place column names should ever need to change.
+  COLUMN_ALIASES: {
+    date:      ['Date'],
+    client:    ['Client', 'Customer', 'Customer Name', 'Merchant'],
+    city:      ['City'],
+    area:      ['Area'],
+    type:      ['Requst type', 'Request type', 'Request Type', 'Requested Type'],
+    ref:       ['Ref', 'Reference'],
+    driver:    ['Driver', 'Courier', 'Courier Name'],
+    status:    ['Request Status', 'Status'],
+    pickupNo:  ['Pickup #', 'Pickup No', 'Pickup Number', 'PickupNo'],
+    fees:      ['Extra Fees', 'Extra Fee', 'ExtraFees'],
+    reason:    ['Reason', 'Failure Reason'],
+    recorded:  ['Recorded on system', 'Recorded On System', 'Recorded']
+  },
+
+  // Columns that MUST be resolved for the Pickup Request sheet to be usable.
+  PICKUP_REQUIRED_COLUMNS: ['date', 'client', 'city', 'area', 'type', 'driver', 'status'],
+
+  // Enum normalization so 'done'/'DONE'/'Done ' etc. all collapse to one
+  // canonical value the dashboard's JS already expects.
+  STATUS_ALIASES: { done: 'Done', completed: 'Done', complete: 'Done', success: 'Done',
+                     fail: 'Fail', failed: 'Fail', failure: 'Fail' },
+  RECORDED_ALIASES: { yes: 'Yes', y: 'Yes', true: 'Yes', no: 'No', n: 'No', false: 'No' }
 };
 // ==============================================================================
 
+
+// ============================== ENTRY POINT ==================================
+
 function doGet(e) {
-  const bypassCache = e && e.parameter && e.parameter.refresh === '1';
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'first_mile_dashboard_payload_v1';
-
-  if (!bypassCache) {
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
-    }
-  }
-
-  const payload = buildPayload();
-  const json = JSON.stringify(payload);
-
   try {
-    // CacheService values are capped at 100KB per key; chunk-safe skip if too big
-    if (json.length < 95000) cache.put(cacheKey, json, CONFIG.CACHE_SECONDS);
-  } catch (err) {
-    // caching is best-effort only; ignore failures
-  }
+    const params = (e && e.parameter) || {};
 
-  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+    if (params.diagnostic === '1') {
+      return jsonOutput(buildDiagnostics());
+    }
+
+    const bypassCache = params.refresh === '1';
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'first_mile_dashboard_payload_v2';
+
+    if (!bypassCache) {
+      const cached = safeCacheGet(cache, cacheKey);
+      if (cached) return jsonOutput(cached, true);
+    }
+
+    const payload = buildPayload();
+
+    // Never cache (or silently accept) a broken/empty read — surface it
+    // as a real error instead of pretending the sheet has no data.
+    if (!payload.meta || payload.meta.totalRecords === 0) {
+      payload.meta = payload.meta || {};
+      payload.meta.warning = 'totalRecords is 0 — check ?diagnostic=1 to see what was detected.';
+    } else {
+      safeCachePut(cache, cacheKey, payload, CONFIG.CACHE_SECONDS);
+    }
+
+    return jsonOutput(payload);
+
+  } catch (err) {
+    // CRITICAL: always return valid JSON, never let Apps Script's default
+    // HTML error page reach the dashboard's res.json() call.
+    return jsonOutput({
+      error: true,
+      message: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : null
+    });
+  }
 }
+
+function jsonOutput(obj, fromCache) {
+  if (fromCache && obj && typeof obj === 'object') obj = Object.assign({}, obj, { _cached: true });
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function safeCacheGet(cache, key) {
+  try {
+    const raw = cache.get(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null; // corrupted cache entry — just treat as a miss
+  }
+}
+
+function safeCachePut(cache, key, obj, seconds) {
+  try {
+    const json = JSON.stringify(obj);
+    if (json.length < 95000) cache.put(key, json, seconds); // CacheService caps ~100KB/key
+  } catch (err) {
+    // caching is best-effort only; never let a cache failure break the response
+  }
+}
+
+
+// ============================== SHEET HELPERS ================================
 
 function findSheet(namePrefix) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
-  const target = namePrefix.trim().toLowerCase();
+  const target = normalizeText(namePrefix);
   for (let i = 0; i < sheets.length; i++) {
-    const name = sheets[i].getName().trim().toLowerCase();
+    const name = normalizeText(sheets[i].getName());
     if (name.indexOf(target) === 0) return sheets[i];
   }
-  throw new Error('Sheet not found for prefix: ' + namePrefix);
+  throw new Error('Sheet not found for name/prefix "' + namePrefix + '". Available sheets: ' +
+    SpreadsheetApp.getActiveSpreadsheet().getSheets().map(s => s.getName()).join(', '));
 }
 
-function findHeaderRow(values, requiredCols) {
-  for (let r = 0; r < Math.min(CONFIG.HEADER_SEARCH_ROWS, values.length); r++) {
-    const row = values[r].map(v => String(v).trim());
-    const hasAll = requiredCols.every(c => row.indexOf(c) !== -1);
-    if (hasAll) return r;
-  }
-  throw new Error('Could not locate header row containing: ' + requiredCols.join(', '));
+/** Trim + collapse internal whitespace + lowercase, for comparisons only. */
+function normalizeText(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function norm(s) {
+/** Trim + collapse internal whitespace, KEEPING original case (for display/output). */
+function cleanText(s) {
   if (s === null || s === undefined || s === '') return null;
   const t = String(s).replace(/\s+/g, ' ').trim();
   return t === '' ? null : t;
 }
 
+function isRowBlank(row) {
+  for (let i = 0; i < row.length; i++) {
+    if (cleanText(row[i]) !== null) return false;
+  }
+  return true;
+}
+
+/**
+ * Resolves CONFIG.COLUMN_ALIASES against one header row.
+ * Returns { col: {canonicalKey: columnIndex, ...}, matchedCount, headerTexts }
+ */
+function resolveColumns(headerRow, aliasMap) {
+  const normalizedHeaderRow = headerRow.map(normalizeText);
+  const col = {};
+  let matchedCount = 0;
+
+  Object.keys(aliasMap).forEach(canonicalKey => {
+    const variants = aliasMap[canonicalKey].map(normalizeText);
+    let foundIdx = -1;
+    for (let i = 0; i < normalizedHeaderRow.length; i++) {
+      if (variants.indexOf(normalizedHeaderRow[i]) !== -1) { foundIdx = i; break; }
+    }
+    if (foundIdx !== -1) { col[canonicalKey] = foundIdx; matchedCount++; }
+  });
+
+  return { col, matchedCount, headerTexts: headerRow.map(cleanText) };
+}
+
+/**
+ * Scans the first N rows for one that resolves every column in
+ * requiredKeys. Skips fully-blank rows automatically. If nothing
+ * matches, throws an error naming exactly which required columns are
+ * still missing on the best-scoring candidate row, and what that row's
+ * actual header text was — so a future mismatch is a 5-second fix.
+ */
+function findHeaderRowAndColumns(values, aliasMap, requiredKeys, searchRows) {
+  let best = null; // {rowIndex, col, matchedCount, headerTexts}
+
+  for (let r = 0; r < Math.min(searchRows, values.length); r++) {
+    const row = values[r];
+    if (isRowBlank(row)) continue; // rule 4: ignore blank rows automatically
+
+    const resolved = resolveColumns(row, aliasMap);
+    const hasAllRequired = requiredKeys.every(k => resolved.col[k] !== undefined);
+
+    if (!best || resolved.matchedCount > best.matchedCount) {
+      best = Object.assign({ rowIndex: r }, resolved);
+    }
+    if (hasAllRequired) {
+      return { rowIndex: r, col: resolved.col };
+    }
+  }
+
+  const missing = best
+    ? requiredKeys.filter(k => best.col[k] === undefined)
+    : requiredKeys;
+  const bestRowDesc = best
+    ? 'Closest match was row ' + (best.rowIndex + 1) + ' with headers: [' + best.headerTexts.join(', ') + ']'
+    : 'No non-blank row found in the first ' + searchRows + ' rows.';
+
+  throw new Error(
+    'Could not locate a header row containing all of: ' + requiredKeys.join(', ') +
+    '. Still missing: ' + missing.join(', ') + '. ' + bestRowDesc +
+    '. Add any differently-worded header to CONFIG.COLUMN_ALIASES in Code.gs.'
+  );
+}
+
+/** Normalizes an enum-ish cell value (status/recorded) against an alias map, case-insensitively. */
+function normalizeEnum(value, aliasMap) {
+  const cleaned = cleanText(value);
+  if (cleaned === null) return null;
+  const key = normalizeText(cleaned);
+  return aliasMap.hasOwnProperty(key) ? aliasMap[key] : cleaned; // fall back to the cleaned original rather than silently dropping unexpected values
+}
+
+/** Accepts a Date object, a Sheets serial-date number, or a parseable string. */
+function parseDateCell(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v)) return v;
+  if (typeof v === 'number' && isFinite(v)) {
+    // Google Sheets/Excel serial date epoch = Dec 30, 1899
+    const epoch = new Date(1899, 11, 30);
+    return new Date(epoch.getTime() + v * 86400000);
+  }
+  if (typeof v === 'string' && v.trim() !== '') {
+    const d = new Date(v.trim());
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
+function fmtDate(d) {
+  if (!d) return null;
+  const y = d.getFullYear(), m = ('0' + (d.getMonth() + 1)).slice(-2), day = ('0' + d.getDate()).slice(-2);
+  return y + '-' + m + '-' + day;
+}
+function monthKeyFromDate(d) {
+  if (!d) return null;
+  const y = d.getFullYear(), m = ('0' + (d.getMonth() + 1)).slice(-2);
+  return y + '-' + m;
+}
+
 function normBranch(s) {
-  const t = norm(s);
+  const t = cleanText(s);
   if (t === null) return null;
   let b = t.replace(/^\(?\s*فرع\s*/, '').replace(/[()]/g, '').trim();
   if (b === '') return null;
@@ -100,57 +364,167 @@ function normBranch(s) {
   return synonyms[b] || b;
 }
 
-function fmtDate(d) {
-  if (Object.prototype.toString.call(d) === '[object Date]' && !isNaN(d)) {
-    const y = d.getFullYear(), m = ('0' + (d.getMonth() + 1)).slice(-2), day = ('0' + d.getDate()).slice(-2);
-    return y + '-' + m + '-' + day;
-  }
-  return null;
+
+// ============================== DIAGNOSTICS ==================================
+/**
+ * GET .../exec?diagnostic=1
+ * Returns header-detection results for every sheet without running the
+ * full aggregation — the fastest way to confirm column matching is
+ * correct after editing a sheet, with no Apps Script editor needed.
+ */
+function buildDiagnostics() {
+  const result = { generatedAt: new Date().toISOString(), sheets: {} };
+
+  Object.keys(CONFIG.SHEET_NAMES).forEach(key => {
+    const prefix = CONFIG.SHEET_NAMES[key];
+    try {
+      const sheet = findSheet(prefix);
+      const values = sheet.getDataRange().getValues();
+      const previewRows = values.slice(0, Math.min(CONFIG.HEADER_SEARCH_ROWS, values.length))
+        .map(r => r.map(cleanText));
+
+      let headerInfo = null;
+      try {
+        if (key === 'pickup') {
+          const found = findHeaderRowAndColumns(values, CONFIG.COLUMN_ALIASES, CONFIG.PICKUP_REQUIRED_COLUMNS, CONFIG.HEADER_SEARCH_ROWS);
+          headerInfo = {
+            headerRowIndex1Based: found.rowIndex + 1,
+            resolvedColumns: found.col,
+            sampleDataRow: values[found.rowIndex + 1] ? values[found.rowIndex + 1].map(cleanText) : null
+          };
+        } else {
+          headerInfo = { note: 'This sheet is not aggregation-critical; only Pickup Request is fully diagnosed here.' };
+        }
+      } catch (headerErr) {
+        headerInfo = { error: String(headerErr.message || headerErr) };
+      }
+
+      result.sheets[key] = {
+        matchedSheetName: sheet.getName(),
+        totalRows: values.length,
+        totalCols: values.length ? values[0].length : 0,
+        previewRows: previewRows,
+        headerDetection: headerInfo
+      };
+    } catch (err) {
+      result.sheets[key] = { error: String(err.message || err) };
+    }
+  });
+
+  return result;
 }
-function monthKey(d) {
-  if (Object.prototype.toString.call(d) === '[object Date]' && !isNaN(d)) {
-    const y = d.getFullYear(), m = ('0' + (d.getMonth() + 1)).slice(-2);
-    return y + '-' + m;
-  }
-  return null;
-}
+
+
+// ============================== MAIN PAYLOAD =================================
 
 function buildPayload() {
-  // ---------------- Pickup Request ----------------
-  const pickupSheet = findSheet(CONFIG.SHEET_NAMES.pickup);
-  const allValues = pickupSheet.getDataRange().getValues();
-  const headerRowIdx = findHeaderRow(allValues, ['Date', 'Client', 'City', 'Area']);
-  const headers = allValues[headerRowIdx].map(h => String(h).trim());
-  const col = {};
-  headers.forEach((h, i) => { col[h] = i; });
+  const pickupResult = readPickupRequest();
+  const registeredMerchants = readRegisteredMerchantsCount(pickupResult.clients.length);
+  const branchInfo = readCourierBranches(pickupResult.drivers);
+  const salaryRef = readSalaryReference();
 
-  const need = ['Date', 'Client', 'City', 'Area', 'Requst type', 'Driver', 'Request Status', 'Extra Fees', 'Reason', 'Recorded on system'];
-  need.forEach(c => { if (!(c in col)) throw new Error('Missing expected column in Pickup Request: ' + c); });
+  const recordedTotal = pickupResult.recordedYes + pickupResult.recordedNo;
+
+  const meta = {
+    totalRecords: pickupResult.totalRecords,
+    processedRows: pickupResult.processedRows,
+    skippedRows: pickupResult.skippedRows,
+    skippedRowReasons: pickupResult.skippedRowReasons,
+    headerRowIndex1Based: pickupResult.headerRowIndex + 1,
+    dateMin: pickupResult.dateMin,
+    dateMax: pickupResult.dateMax,
+    uniqueClients: pickupResult.clients.length,
+    registeredMerchants: registeredMerchants,
+    uniqueDrivers: pickupResult.drivers.length,
+    uniqueAreas: pickupResult.areas.length,
+    uniqueCities: pickupResult.cities.length,
+    uniqueTypes: pickupResult.types.length,
+    recordedYes: pickupResult.recordedYes,
+    recordedNo: pickupResult.recordedNo,
+    recordedBlank: pickupResult.totalRecords - recordedTotal,
+    branchCoverage: branchInfo.branchCoverage,
+    branchTotal: pickupResult.drivers.length,
+    partialMonths: [],
+    generatedAt: new Date().toISOString()
+  };
+
+  return {
+    months: pickupResult.months,
+    cities: pickupResult.cities,
+    areas: pickupResult.areas,
+    drivers: pickupResult.drivers,
+    clients: pickupResult.clients,
+    types: pickupResult.types,
+    statuses: pickupResult.statuses,
+    reasons: pickupResult.reasons,
+    rows: pickupResult.rows,
+    pickupDays: pickupResult.pickupDays,
+    driverBranch: branchInfo.driverBranch,
+    salaryRef: salaryRef,
+    meta: meta
+  };
+}
+
+
+// ============================== PICKUP REQUEST ================================
+
+function readPickupRequest() {
+  const sheet = findSheet(CONFIG.SHEET_NAMES.pickup);
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) throw new Error('"' + sheet.getName() + '" has fewer than 2 rows — nothing to read.');
+
+  const header = findHeaderRowAndColumns(values, CONFIG.COLUMN_ALIASES, CONFIG.PICKUP_REQUIRED_COLUMNS, CONFIG.HEADER_SEARCH_ROWS);
+  const col = header.col; // canonical-key -> column index, resolved case-insensitively
 
   const monthsSet = {}, citiesSet = {}, areasSet = {}, driversSet = {}, clientsSet = {}, typesSet = {}, statusesSet = {}, reasonsSet = {};
-  const groups = {}; // key -> {count, fees}
-  let totalRecords = 0, dateMin = null, dateMax = null;
+  const groups = {}; // composite-key -> {m,c,a,d,t,s,cl,r,count,fees}
+  const pickupDaysRaw = []; // Phase 6A: one un-aggregated entry per valid Pickup-type row (date kept, never merged)
+
+  let totalRecords = 0, processedRows = 0, skippedRows = 0;
+  const skippedRowReasons = {}; // reason label -> count, for diagnostics
+  let dateMin = null, dateMax = null;
   let recordedYes = 0, recordedNo = 0;
 
-  for (let r = headerRowIdx + 1; r < allValues.length; r++) {
-    const row = allValues[r];
-    const dateVal = row[col['Date']];
-    const mKey = monthKey(dateVal);
-    if (!mKey) continue; // skip blank/malformed rows
+  function bumpSkip(reasonLabel) {
+    skippedRows++;
+    skippedRowReasons[reasonLabel] = (skippedRowReasons[reasonLabel] || 0) + 1;
+  }
 
-    const city = norm(row[col['City']]);
-    const area = norm(row[col['Area']]);
-    const driver = norm(row[col['Driver']]);
-    const client = norm(row[col['Client']]);
-    const type = norm(row[col['Requst type']]);
-    const status = norm(row[col['Request Status']]);
-    if (!city || !area || !driver || !client || !type || !status) continue;
+  for (let r = header.rowIndex + 1; r < values.length; r++) {
+    const row = values[r];
+    if (isRowBlank(row)) continue; // don't even count fully blank trailing rows
 
-    const reasonRaw = norm(row[col['Reason']]);
+    totalRecords++;
+
+    const dateObj = parseDateCell(row[col.date]);
+    if (!dateObj) { bumpSkip('unparseable or missing date'); continue; }
+    const mKey = monthKeyFromDate(dateObj);
+
+    const city = cleanText(row[col.city]);
+    const area = cleanText(row[col.area]);
+    const driver = cleanText(row[col.driver]);
+    const client = cleanText(row[col.client]);
+    const type = cleanText(row[col.type]);
+    const statusRaw = row[col.status];
+    const status = normalizeEnum(statusRaw, CONFIG.STATUS_ALIASES);
+
+    if (!city)   { bumpSkip('missing city'); continue; }
+    if (!area)   { bumpSkip('missing area'); continue; }
+    if (!driver) { bumpSkip('missing driver'); continue; }
+    if (!client) { bumpSkip('missing client'); continue; }
+    if (!type)   { bumpSkip('missing request type'); continue; }
+    if (!status) { bumpSkip('missing/unrecognized status'); continue; }
+
+    processedRows++;
+
+    const reasonRaw = col.reason !== undefined ? cleanText(row[col.reason]) : null;
     const reason = reasonRaw === null ? 'N/A' : reasonRaw;
-    const fees = Number(row[col['Extra Fees']]) || 0;
-    const recorded = norm(row[col['Recorded on system']]);
-    if (recorded === 'Yes') recordedYes++; else if (recorded === 'No') recordedNo++;
+    const fees = col.fees !== undefined ? (Number(row[col.fees]) || 0) : 0;
+
+    if (col.recorded !== undefined) {
+      const recorded = normalizeEnum(row[col.recorded], CONFIG.RECORDED_ALIASES);
+      if (recorded === 'Yes') recordedYes++; else if (recorded === 'No') recordedNo++;
+    }
 
     monthsSet[mKey] = true; citiesSet[city] = true; areasSet[area] = true; driversSet[driver] = true;
     clientsSet[client] = true; typesSet[type] = true; statusesSet[status] = true; reasonsSet[reason] = true;
@@ -160,9 +534,20 @@ function buildPayload() {
     groups[key].count += 1;
     groups[key].fees += fees;
 
-    totalRecords++;
-    const dStr = fmtDate(dateVal);
+    const dStr = fmtDate(dateObj);
     if (dStr) { if (!dateMin || dStr < dateMin) dateMin = dStr; if (!dateMax || dStr > dateMax) dateMax = dStr; }
+
+    // ---- Phase 6A: pickupDays (additive only — does not touch `groups`/`rows`) ----
+    // Matched case-insensitively ('Pickup', 'pickup', 'PICKUP', ' Pickup ' all match)
+    // so the same row that is already grouped into `rows` above is also, when it is
+    // a Pickup-type row with a valid date, recorded here as its own un-aggregated
+    // entry. Nothing here changes `groups`, `key`, or any of the counters above.
+    if (normalizeText(type) === 'pickup' && dStr) {
+      pickupDaysRaw.push({
+        m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason,
+        count: 1, fees: fees, date: dStr
+      });
+    }
   }
 
   const months = Object.keys(monthsSet).sort();
@@ -181,95 +566,142 @@ function buildPayload() {
 
   const rows = Object.keys(groups).map(k => {
     const g = groups[k];
-    return [mIdx[g.m], cIdx[g.c], aIdx[g.a], dIdx[g.d], tIdx[g.t], sIdx[g.s], clIdx[g.cl], rIdx[g.r], g.count, Math.round(g.fees * 100) / 100];
+    return [
+      mIdx[g.m], cIdx[g.c], aIdx[g.a], dIdx[g.d], tIdx[g.t], sIdx[g.s], clIdx[g.cl], rIdx[g.r],
+      g.count, Math.round(g.fees * 100) / 100
+    ];
   });
 
-  // ---------------- Customer Data ----------------
-  let registeredMerchants = 0;
+  // ---- Phase 6A: pickupDays, encoded with the SAME dictionaries/indices as `rows` ----
+  // Shape per entry: [monthIdx, cityIdx, areaIdx, driverIdx, typeIdx, statusIdx,
+  //                    clientIdx, reasonIdx, count(=1), fees, date("YYYY-MM-DD")]
+  // Every value used here (p.m, p.c, p.a, p.d, p.t, p.s, p.cl, p.r) was captured
+  // from a row that already passed the exact same validation as `rows` above, so
+  // every index lookup below is guaranteed to exist — no undefined/null indices.
+  const pickupDays = pickupDaysRaw.map(function (p) {
+    return [
+      mIdx[p.m], cIdx[p.c], aIdx[p.a], dIdx[p.d], tIdx[p.t], sIdx[p.s], clIdx[p.cl], rIdx[p.r],
+      1, Math.round(p.fees * 100) / 100, p.date
+    ];
+  });
+
+  return {
+    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays,
+    totalRecords, processedRows, skippedRows, skippedRowReasons,
+    dateMin, dateMax, recordedYes, recordedNo,
+    headerRowIndex: header.rowIndex
+  };
+}
+
+
+// ============================== CUSTOMER DATA =================================
+
+function readRegisteredMerchantsCount(fallbackCount) {
   try {
-    const custSheet = findSheet(CONFIG.SHEET_NAMES.customer);
-    const custValues = custSheet.getDataRange().getValues();
-    const custHeaderIdx = findHeaderRow(custValues, ['Customer Name']);
-    const nameCol = custValues[custHeaderIdx].map(h => String(h).trim()).indexOf('Customer Name');
+    const sheet = findSheet(CONFIG.SHEET_NAMES.customer);
+    const values = sheet.getDataRange().getValues();
+    const header = findHeaderRowAndColumns(values, { name: ['Customer Name', 'Client', 'Customer'] }, ['name'], CONFIG.HEADER_SEARCH_ROWS);
     const seen = {};
-    for (let r = custHeaderIdx + 1; r < custValues.length; r++) {
-      const nm = norm(custValues[r][nameCol]);
+    for (let r = header.rowIndex + 1; r < values.length; r++) {
+      const nm = cleanText(values[r][header.col.name]);
       if (nm) seen[nm] = true;
     }
-    registeredMerchants = Object.keys(seen).length;
+    return Object.keys(seen).length;
   } catch (err) {
-    registeredMerchants = clients.length; // graceful fallback
+    return fallbackCount; // graceful fallback — this figure is informational, not critical
   }
+}
 
-  // ---------------- Courier Data Info -> branch mapping ----------------
+
+// ============================== COURIER DATA INFO ==============================
+
+function readCourierBranches(drivers) {
   let driverBranch = drivers.map(() => null);
   let branchCoverage = 0;
   try {
-    const cdiSheet = findSheet(CONFIG.SHEET_NAMES.courierInfo);
-    const cdiValues = cdiSheet.getDataRange().getValues();
-    const cdiHeaderIdx = findHeaderRow(cdiValues, ['Name', 'Branch']);
-    const headerRow = cdiValues[cdiHeaderIdx].map(h => String(h).trim());
-    const nameCol = headerRow.indexOf('Name'), branchCol = headerRow.indexOf('Branch');
+    const sheet = findSheet(CONFIG.SHEET_NAMES.courierInfo);
+    const values = sheet.getDataRange().getValues();
+    const header = findHeaderRowAndColumns(values, { name: ['Name', 'Driver', 'Courier'], branch: ['Branch'] }, ['name', 'branch'], CONFIG.HEADER_SEARCH_ROWS);
     const branchMap = {};
-    for (let r = cdiHeaderIdx + 1; r < cdiValues.length; r++) {
-      const nm = norm(cdiValues[r][nameCol]);
+    for (let r = header.rowIndex + 1; r < values.length; r++) {
+      const nm = cleanText(values[r][header.col.name]);
       if (!nm) continue;
-      branchMap[nm] = normBranch(cdiValues[r][branchCol]);
+      branchMap[nm] = normBranch(values[r][header.col.branch]);
     }
     driverBranch = drivers.map(dv => branchMap.hasOwnProperty(dv) ? branchMap[dv] : null);
     branchCoverage = driverBranch.filter(b => !!b).length;
   } catch (err) {
-    // leave defaults
+    // leave defaults — branch mapping is a bonus insight, not critical path
+  }
+  return { driverBranch, branchCoverage };
+}
+
+
+// ============================== COURIER SALARY (reference only) ================
+
+function readSalaryReference() {
+  try {
+    const sheet = findSheet(CONFIG.SHEET_NAMES.courierSalary);
+    const values = sheet.getDataRange().getValues();
+    const header = findHeaderRowAndColumns(
+      values,
+      { name: ['Name', 'Driver', 'Courier'], vehicle: ['vehicle Type', 'Vehicle Type', 'Vehicle'], salary: ['Fixd Salary', 'Fixed Salary'] },
+      ['name', 'salary'],
+      CONFIG.HEADER_SEARCH_ROWS
+    );
+    const out = [];
+    for (let r = header.rowIndex + 1; r < values.length; r++) {
+      const nm = cleanText(values[r][header.col.name]);
+      if (!nm) continue;
+      const salRaw = values[r][header.col.salary];
+      const sal = (salRaw === '' || salRaw === null || salRaw === undefined || isNaN(Number(salRaw))) ? null : Number(salRaw);
+      out.push({
+        name: nm,
+        vehicle: header.col.vehicle !== undefined ? cleanText(values[r][header.col.vehicle]) : null,
+        fixed_salary: sal
+      });
+    }
+    return out;
+  } catch (err) {
+    return []; // reference-only sheet — never block the dashboard on this
+  }
+}
+
+
+// ============================== MANUAL SELF-TEST ================================
+/**
+ * Run this from the Apps Script editor (Run -> runSelfTest) any time you
+ * want a plain-language pass/fail check in the execution log, without
+ * touching the deployed web app at all.
+ */
+function runSelfTest() {
+  Logger.log('--- ARRIVE First Mile backend self-test ---');
+  try {
+    const diag = buildDiagnostics();
+    Logger.log(JSON.stringify(diag, null, 2));
+  } catch (err) {
+    Logger.log('DIAGNOSTICS FAILED: ' + err.message);
   }
 
-  // ---------------- Courier Salary (partial reference) ----------------
-  let salaryRef = [];
   try {
-    const csSheet = findSheet(CONFIG.SHEET_NAMES.courierSalary);
-    const csValues = csSheet.getDataRange().getValues();
-    const csHeaderIdx = findHeaderRow(csValues, ['Name', 'Fixd Salary']);
-    const headerRow = csValues[csHeaderIdx].map(h => String(h).trim());
-    const nameCol = headerRow.indexOf('Name'), vehCol = headerRow.indexOf('vehicle Type'), salCol = headerRow.indexOf('Fixd Salary');
-    for (let r = csHeaderIdx + 1; r < csValues.length; r++) {
-      const nm = norm(csValues[r][nameCol]);
-      if (!nm) continue;
-      const sal = csValues[r][salCol];
-      salaryRef.push({ name: nm, vehicle: norm(csValues[r][vehCol]), fixed_salary: (sal === '' || sal === null) ? null : Number(sal) });
+    const payload = buildPayload();
+    Logger.log('buildPayload() OK.');
+    Logger.log('totalRecords=' + payload.meta.totalRecords +
+      ' processedRows=' + payload.meta.processedRows +
+      ' skippedRows=' + payload.meta.skippedRows);
+    Logger.log('skipped row reasons: ' + JSON.stringify(payload.meta.skippedRowReasons));
+    Logger.log('months=' + payload.months.length + ' cities=' + payload.cities.length +
+      ' areas=' + payload.areas.length + ' drivers=' + payload.drivers.length +
+      ' clients=' + payload.clients.length + ' rows=' + payload.rows.length +
+      ' pickupDays=' + payload.pickupDays.length);
+    if (payload.meta.totalRecords === 0) {
+      Logger.log('WARNING: totalRecords is 0. Check skippedRowReasons above and the ' +
+        'headerDetection block in the diagnostics output.');
+    } else {
+      Logger.log('Looks healthy.');
     }
   } catch (err) {
-    salaryRef = [];
+    Logger.log('buildPayload() FAILED: ' + err.message);
+    Logger.log(err.stack);
   }
-
-  const recordedTotal = recordedYes + recordedNo;
-
-  const meta = {
-    totalRecords: totalRecords,
-    dateMin: dateMin,
-    dateMax: dateMax,
-    uniqueClients: clients.length,
-    registeredMerchants: registeredMerchants,
-    uniqueDrivers: drivers.length,
-    uniqueAreas: areas.length,
-    uniqueCities: cities.length,
-    uniqueTypes: types.length,
-    recordedYes: recordedYes,
-    recordedNo: recordedNo,
-    recordedBlank: totalRecords - recordedTotal,
-    branchCoverage: branchCoverage,
-    branchTotal: drivers.length,
-    partialMonths: [],           // set manually below if the current month is still in progress
-    generatedAt: new Date().toISOString()
-  };
-  // Flag the most recent month as partial if it doesn't look complete (heuristic: < 20 days of data)
-  if (months.length) {
-    const lastMonth = months[months.length - 1];
-    const daysInData = {};
-    // (kept simple/heuristic — safe to hardcode manually here instead if preferred)
-  }
-
-  return {
-    months: months, cities: cities, areas: areas, drivers: drivers, clients: clients,
-    types: types, statuses: statuses, reasons: reasons, rows: rows,
-    driverBranch: driverBranch, salaryRef: salaryRef, meta: meta
-  };
 }
