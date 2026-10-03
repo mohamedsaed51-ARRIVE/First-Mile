@@ -97,6 +97,24 @@ window.DashboardReport = (function(){
       };
     }
 
+    // Phase 5: a condensed, one-line "what's this report actually scoped
+    // to" summary for the executive cover — reuses the exact same
+    // describeSet()/describePeriod() strings buildScope() already
+    // produces, just drops the ones that are simply "All" so the cover
+    // stays clean instead of listing 11 unfiltered rows. No new scope
+    // logic — this is a display-only filter over buildScope()'s output.
+    function buildCoverScopeLine(scope){
+      const allLabel = t('allSelected');
+      const parts = [
+        [t('cityLabel'), scope.city], [t('branchFilterLabel'), scope.branch],
+        [t('areaFilterLabel'), scope.area], [t('statusLabel'), scope.requestStatus],
+        [t('requestTypeLabel'), scope.requestType], [t('driverFilterLabel'), scope.driver],
+        [t('merchantFilterLabel'), scope.client], [t('reasonFilterLabel'), scope.reason],
+        [t('extraFeesFilterLabel'), scope.extraFees]
+      ].filter(([,v])=>v && v!==allLabel && v!==t('reportNone'));
+      return parts.length ? parts.map(([l,v])=>`${l}: ${v}`).join(' · ') : t('reportCoverAllOperations');
+    }
+
     function pct(part, whole){ return whole ? part/whole*100 : 0; }
 
     function buildPerformance(agg){
@@ -131,7 +149,35 @@ window.DashboardReport = (function(){
         name: reasons[ri], total: agg.reasonAgg[ri], share: pct(agg.reasonAgg[ri], agg.fail)
       })).filter(r=>r.name!=='N/A').sort((a,b)=>b.total-a.total);
 
-      return { cities:cityRows, areas:areaRows, drivers:driverRows, statuses:statusRows, requestTypes:typeRows, reasons:reasonRows };
+      // Phase 5: "Best Performers" / "Areas Requiring Attention" splits —
+      // presentation-only regrouping of the SAME cityRows/areaRows this
+      // function already built, using the SAME qualifying-volume
+      // threshold and the SAME rateClass() cutoff buildAttention() below
+      // already uses for badCities/badAreas. No new ranking formula: it's
+      // the existing successRate field, filtered by the existing
+      // threshold, sorted by the existing field. Drivers reuse
+      // insightsEngine.computeTopBottomDrivers() as-is (Phase 1 logic,
+      // unchanged) rather than recomputing a top/bottom split here.
+      const qualifyingCities = cityRows.filter(c=>c.total>=thresholds.minCityVolume);
+      const cityBest = qualifyingCities.slice().sort((a,b)=>b.successRate-a.successRate).slice(0,5);
+      const cityAttention = qualifyingCities.filter(c=>rateClass(c.successRate)==='rate-bad').slice().sort((a,b)=>a.successRate-b.successRate).slice(0,5);
+      const qualifyingAreas = areaRows.filter(a=>a.total>=thresholds.minCityVolume);
+      const areaBest = qualifyingAreas.slice().sort((a,b)=>b.successRate-a.successRate).slice(0,5);
+      const areaAttention = qualifyingAreas.filter(a=>rateClass(a.successRate)==='rate-bad').slice().sort((a,b)=>a.successRate-b.successRate).slice(0,5);
+      const { top: driverBest, bottom: driverBottomAll } = insightsEngine.computeTopBottomDrivers(agg.driverAgg);
+      const driverAttention = driverBottomAll.filter(d=>rateClass(d.rate)==='rate-bad');
+
+      // Failure concentration: a plain sum of the top-3 reasons' already-
+      // computed `.share` values — not a new source calculation.
+      const topReasons = reasonRows.slice(0,3);
+      const failureConcentrationPct = topReasons.reduce((s,r)=>s+r.share,0);
+
+      return {
+        cities:cityRows, areas:areaRows, drivers:driverRows, statuses:statusRows, requestTypes:typeRows, reasons:reasonRows,
+        cityBest, cityAttention, areaBest, areaAttention,
+        driverBest: driverBest.slice(0,5), driverAttention: driverAttention.slice(0,5),
+        topFailureReasons: topReasons, failureConcentrationPct
+      };
     }
 
     // Management Attention: every item here is derived strictly from
@@ -180,6 +226,29 @@ window.DashboardReport = (function(){
       return items;
     }
 
+    // Phase 5: a short "what should management take away from this"
+    // message — assembled ONLY from numbers/strings already computed
+    // above (summary, attention, insights) or already computed by
+    // comparison.js (kpis[].direction/pctLabel/changeLabel). No new
+    // arithmetic happens here; this is template selection + lookup only.
+    function buildManagementMessage(summary, attentionItems, insights, comparisonData){
+      const lines = [];
+      lines.push(t('msgOverviewLine', { total: summary.totalRequestsLabel, rate: summary.successRateLabel }));
+      lines.push(attentionItems.length
+        ? t('msgAttentionLine', { n: attentionItems.length })
+        : t('msgAttentionLineNone'));
+      if(insights[0]) lines.push(t('msgTopInsightLine', { tag: insights[0].tag, main: insights[0].main }));
+      if(comparisonData){
+        const rateKpi = comparisonData.kpis.find(k=>k.key==='successRate');
+        if(rateKpi){
+          const key = rateKpi.direction==='improved' ? 'msgTrendImproved'
+            : rateKpi.direction==='declined' ? 'msgTrendDeclined' : 'msgTrendNeutral';
+          lines.push(t(key, { rate: rateKpi.currentLabel, pct: rateKpi.pctLabel }));
+        }
+      }
+      return lines;
+    }
+
     /**
      * buildManagementReportData(agg, state) — the single entry point.
      *   agg: the aggregate object dashboard.js's computeAggregates()
@@ -202,14 +271,18 @@ window.DashboardReport = (function(){
       const attention = buildAttention(agg, performance);
       const insights = insightsEngine.computeInsightCards(agg.driverAgg, agg.areaAgg, agg.clientAgg, agg.reasonAgg, agg.cityAgg, agg.typeAgg, agg.branchAgg);
       const recommendations = insightsEngine.computeRecommendationItems(agg.driverAgg, agg.areaAgg, agg.cityAgg, agg.reasonAgg, agg.branchAgg);
+      const cover = { scopeLine: buildCoverScopeLine(scope), periodLabel: scope.period };
+      const managementMessage = buildManagementMessage(summary, attention, insights, comparisonData);
       return {
         generatedAt: new Date(),
+        cover,
         scope,
         summary,
         performance,
         attention,
         insights,
         recommendations,
+        managementMessage,
         comparison: comparisonData || null
       };
     }

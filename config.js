@@ -28,7 +28,7 @@ window.ARRIVE_CONFIG = {
 
   // 'en' or 'ar' — language shown on first load, before the user
   // touches the language toggle.
-  DEFAULT_LANG: 'en',
+  DEFAULT_LANG: 'ar',
 
   // Free-text identifier, only used in console warnings so it's
   // obvious which dashboard logged them when several are open.

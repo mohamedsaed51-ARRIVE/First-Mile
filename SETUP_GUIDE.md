@@ -6,12 +6,12 @@ This connects the dashboard to your live Google Sheet, using the shared ARRIVE a
 
 | File | Change per dashboard? | Purpose |
 |---|---|---|
-| `First_Mile_Dashboard.html` | No | The dashboard UI and First-Mile-specific render logic. |
+| `index.html` | No | The dashboard UI and First-Mile-specific render logic. |
 | `config.js` | **Yes — the only file you edit** | Apps Script URL, auto-refresh interval, retry/timeout settings. |
 | `arrive-data-service.js` | No — reused as-is | Generic fetch/retry/timeout/auto-refresh layer. No knowledge of First Mile at all. |
 | `Code.gs` | Yes, per sheet | Goes inside the Google Sheet's Apps Script editor (not opened in a browser). |
 
-Keep `First_Mile_Dashboard.html`, `config.js`, and `arrive-data-service.js` in the **same folder** — the HTML loads the other two as `<script src="...">`.
+Keep `index.html` and every `.js`/`.css` file in the **same folder** — the HTML loads them all as `<script src="...">` (see the full file list below).
 
 ### Reusing this for Inventory / Fleet / Control Tower
 Copy `arrive-data-service.js` unchanged into the new dashboard's folder. Write a new `Code.gs` for that dashboard's sheet, write a new `config.js` pointing at its own Apps Script URL, and build that dashboard's own HTML/render logic. The loading screen, retry button, error screen, manual refresh, auto-refresh, and background-refresh banner all come for free from `arrive-data-service.js` — no need to rebuild that plumbing per dashboard.
@@ -46,7 +46,7 @@ Copy `arrive-data-service.js` unchanged into the new dashboard's folder. Write a
    };
    ```
    with the URL from Step 2. That is the **only edit needed** — everything else (aggregation, KPIs, charts, tables) reads from this one endpoint automatically.
-3. Save, keep `config.js` next to `First_Mile_Dashboard.html` and `arrive-data-service.js`, and open the HTML file (or host the folder anywhere — Google Drive, an internal server, etc.).
+3. Save, keep `config.js` next to `index.html` and the other project files, and open `index.html` (or host the folder anywhere — Google Drive, an internal server, etc.).
 
 ## Loading & refresh behavior
 
@@ -63,6 +63,29 @@ The Apps Script itself also caches its response for 5 minutes by default (`CONFI
 - Make sure the deployment's "Who has access" is set to **Anyone** (not "Anyone with Google account" — that requires sign-in and will block the fetch).
 - If you redeploy, Apps Script sometimes issues a **new** URL — update `CONFIG.APPS_SCRIPT_URL` again after any redeploy (or use "Manage deployments → Edit → same deployment" to keep the URL stable).
 - Open the Apps Script URL directly in a browser tab — if it downloads/shows raw JSON, the backend is fine and the issue is on the dashboard/CORS side; if it shows an error page, the issue is in `Code.gs` (check sheet/column names against `CONFIG.SHEET_NAMES`).
+
+## Phase 6A — `pickupDays` (backend addition, no UI change yet)
+
+The current `Code.gs` also returns a second, independent dataset called
+`pickupDays` alongside the existing `rows` — one entry per individual
+Pickup-type request with a valid date (not aggregated by month like
+`rows`). It exists to support a future "Pickup Days per client" report
+and analytics; it does **not** power any visible chart, table, or KPI in
+this version of the dashboard yet, and it does not change how `rows`,
+the filters, the tables, or the charts behave.
+
+- The frontend reads it safely: if you're still running an older
+  deployment of `Code.gs` that doesn't send `pickupDays`, the dashboard
+  defaults it to an empty list and works exactly as before — nothing
+  breaks.
+- For QA/debugging, once the dashboard is loaded you can open the
+  browser's Developer Console and run:
+  ```js
+  window.__pickupDaysMeasure.byClientForCurrentFilters()
+  ```
+  to see the distinct pickup-day count per client (by client index) for
+  whatever filters are currently applied. This is a debugging aid only —
+  there is no dashboard UI for it in this package.
 
 ## Known scope limits (carried over from the Excel-based build)
 

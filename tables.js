@@ -40,7 +40,7 @@ window.DashboardTables = (function(){
       tbody.innerHTML = pageList.length===0 ? `<tr><td colspan="5"><div class="empty-state">${t('noCouriersMatch')}</div></td></tr>` :
         pageList.map((d,idx)=>{ const gr=start+idx+1; const w=Math.max(4, d.count/maxCount*100);
           return `<tr><td class="rank ${gr<=3?'top3':''}">${gr}</td><td class="name-cell">${esc(d.name)}</td>
-          <td class="num"><div class="bar-cell"><div class="mini-bar"><div class="mini-bar-fill" style="width:${w}%; background:#101B30;"></div></div><span>${fmtNum(d.count)}</span></div></td>
+          <td class="num"><div class="bar-cell"><div class="mini-bar"><div class="mini-bar-fill" style="width:${w}%;"></div></div><span>${fmtNum(d.count)}</span></div></td>
           <td class="num"><span class="rate-badge ${rateClass(d.rate)}">${d.rate.toFixed(0)}%</span></td>
           <td class="num">${fmtNum(d.fees)}</td></tr>`; }).join('');
       renderPaginationControls('driverPagination', page, totalPages, ()=>{state.driverPage--; render();}, ()=>{state.driverPage++; render();});

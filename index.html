@@ -1,528 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>First Mile — Executive Operations Dashboard</title>
+<title>لوحة متابعة الميل الأول — ARRIVE</title>
+<link rel="icon" type="image/png" href="brand/arrive-pin.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-<style>
-:root{
-  --navy:#101B30; --navy-2:#16233D; --navy-3:#22345A;
-  --paper:#F3F5F1; --paper-deep:#E8EBE4; --card:#FFFFFF;
-  --ink:#141F33; --ink-soft:#5B6B78; --ink-faint:#8D99A3;
-  --line:#DEE3DA; --line-dash:#C4CCC1;
-  --gold:#C8912B; --gold-soft:#F7ECD6;
-  --amber:#E2711D; --amber-soft:#FBEBDA;
-  --teal:#0F7A6C; --teal-soft:#DEF0EA;
-  --rust:#C1432E; --rust-soft:#FBE4DF;
-  --radius:16px; --radius-sm:10px;
-  --shadow-sm:0 1px 2px rgba(16,27,48,0.05);
-  --shadow:0 2px 4px rgba(16,27,48,0.04), 0 12px 28px -14px rgba(16,27,48,0.16);
-  --shadow-lg:0 8px 16px -6px rgba(16,27,48,0.12), 0 24px 48px -20px rgba(16,27,48,0.22);
-  --font-display:Georgia,'Amiri','Times New Roman',serif;
-  --font-body:-apple-system,'Segoe UI','Tahoma',Arial,sans-serif;
-  --font-body-ar:'Cairo','Segoe UI','Tahoma',Arial,sans-serif;
-  --font-mono:'SF Mono','Consolas','Courier New',monospace;
-}
-*{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
-body{
-  background:radial-gradient(circle at 1px 1px, rgba(16,27,48,0.05) 1px, transparent 0) 0 0/22px 22px,
-    linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
-  color:var(--ink); font-family:var(--font-body); -webkit-font-smoothing:antialiased;
-  padding:24px 24px 60px;
-}
-html[dir="rtl"] body{ font-family:var(--font-body-ar); }
-html[dir="rtl"] .font-mono-el, html[dir="rtl"] .exec-sub, html[dir="rtl"] .brand-name{ font-family:var(--font-mono); }
-.wrap{max-width:1440px;margin:0 auto;}
-::selection{background:var(--gold-soft); color:var(--navy);}
-button, input, select{font-family:inherit;}
-@keyframes fadeUp{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
-@keyframes spin{ to{transform:rotate(360deg);} }
-.fade-in{animation:fadeUp .35s ease both;}
-
-.state-screen{max-width:520px; margin:80px auto; text-align:center; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:40px 36px;}
-.state-spinner{width:34px; height:34px; border:3px solid var(--line); border-top-color:var(--gold); border-radius:50%; margin:0 auto 18px; animation:spin .8s linear infinite;}
-.state-title{font-family:var(--font-display); font-size:19px; font-weight:600; color:var(--navy); margin-bottom:8px;}
-.state-sub{font-size:13px; color:var(--ink-soft); line-height:1.6; margin-bottom:18px;}
-.state-code{background:var(--paper); border-radius:8px; padding:10px 14px; font-family:var(--font-mono); font-size:11.5px; color:var(--rust); word-break:break-all; text-align:left; direction:ltr; margin-bottom:16px;}
-.retry-btn{background:var(--navy); color:#fff; border:none; padding:10px 22px; border-radius:20px; font-weight:600; font-size:13px; cursor:pointer;}
-.retry-btn:hover{background:var(--gold); color:var(--navy);}
-.hidden{display:none !important;}
-#refreshIcon{transition:transform .4s ease;}
-#refreshBtn.spinning #refreshIcon{animation:spin 1s linear infinite;}
-#syncStatusRow{opacity:.85;}
-.refresh-banner{
-  display:flex; align-items:center; gap:12px; background:var(--amber-soft); color:var(--amber);
-  border:1px solid #EED2AE; border-radius:var(--radius-sm); padding:10px 16px; margin-bottom:16px; font-size:12.5px;
-}
-.refresh-banner span#refreshBannerText{flex:1;}
-.banner-retry-btn{background:var(--amber); color:#fff; border:none; padding:5px 14px; border-radius:16px; font-size:12px; font-weight:600; cursor:pointer;}
-.banner-retry-btn:hover{opacity:.85;}
-.banner-dismiss-btn{background:none; border:none; color:var(--amber); cursor:pointer; font-size:14px; padding:2px 6px;}
-
-.exec-header{
-  background:linear-gradient(135deg, var(--navy) 0%, var(--navy-3) 100%);
-  border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:28px 32px;
-  display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
-  position:relative; overflow:hidden; margin-bottom:16px; color:#fff;
-}
-.exec-header::before{content:""; position:absolute; inset:0;
-  background:repeating-linear-gradient(115deg, rgba(200,145,43,0.07) 0 2px, transparent 2px 34px); pointer-events:none;}
-.exec-header::after{content:""; position:absolute; inset-inline-start:0; top:0; bottom:0; width:5px;
-  background:repeating-linear-gradient(180deg, var(--gold) 0 9px, transparent 9px 18px);}
-.brand-row{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
-.brand-mark{width:34px; height:34px; border-radius:9px; background:var(--gold);
-  display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 4px 10px -2px rgba(200,145,43,0.5);}
-.brand-mark svg{width:19px; height:19px;}
-.brand-name{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:rgba(255,255,255,0.65);}
-.exec-header h1{font-family:var(--font-display); font-weight:600; font-size:29px; letter-spacing:-0.01em; margin:0 0 8px; color:#fff; position:relative;}
-.exec-sub{color:rgba(255,255,255,0.62); font-size:13.5px; font-family:var(--font-mono); position:relative; display:flex; gap:16px; flex-wrap:wrap;}
-.exec-sub b{color:#fff; font-weight:600;}
-.header-right{display:flex; flex-direction:column; align-items:end; gap:12px; position:relative; z-index:1;}
-.header-btn-row{display:flex; gap:8px;}
-.export-btn, .lang-btn{display:flex; align-items:center; gap:7px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.22); color:#fff;
-  font-size:12.5px; font-weight:600; padding:8px 16px; border-radius:20px; cursor:pointer; transition:.15s; backdrop-filter:blur(6px);}
-.export-btn:hover, .lang-btn:hover{background:var(--gold); border-color:var(--gold); color:var(--navy);}
-.export-btn svg{width:13px; height:13px;}
-.record-stamp{text-align:end;}
-.record-count{font-family:var(--font-display); font-weight:600; font-size:27px; color:#fff; font-variant-numeric:tabular-nums; line-height:1;}
-.record-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,0.55); font-family:var(--font-mono); margin-top:4px;}
-.active-filters-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px; position:relative; z-index:1;}
-.af-label{font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,0.45);}
-.af-chip{font-family:var(--font-mono); font-size:11px; padding:3px 10px; border-radius:20px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.18); color:rgba(255,255,255,0.85);}
-
-.filters{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px 26px; margin-bottom:16px;}
-.filters-top{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; row-gap:8px; margin-bottom:14px;}
-.filters-title{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--ink-soft); display:flex; align-items:center; gap:7px;}
-.filters-title .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 3px var(--teal-soft);}
-.reset-btn{font-size:12.5px; font-weight:600; color:var(--rust); background:var(--rust-soft); border:1px solid transparent; padding:6px 14px; border-radius:20px; cursor:pointer; transition:.15s;}
-.reset-btn:hover{background:var(--rust); color:#fff;}
-.filter-grid{display:flex; flex-wrap:wrap; gap:20px 30px;}
-.filter-group{display:flex; flex-direction:column; gap:8px;}
-.filter-label{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-faint); font-weight:700;}
-.month-range{display:flex; align-items:center; gap:8px;}
-.month-range select{font-family:var(--font-mono); font-size:12.5px; padding:7px 10px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer;}
-.month-range span{color:var(--ink-faint); font-size:12px;}
-.chip-row{display:flex; flex-wrap:wrap; gap:6px; max-width:560px;}
-.chip{font-size:12.5px; font-weight:500; padding:6px 13px; border-radius:20px; border:1px solid var(--line); background:var(--paper); color:var(--ink-soft); cursor:pointer; transition:.15s; user-select:none;}
-.chip:hover{border-color:var(--gold); color:var(--navy);}
-.chip.active{background:var(--navy); border-color:var(--navy); color:#fff;}
-.chip.active.status-Done{background:var(--teal); border-color:var(--teal);}
-.chip.active.status-Fail{background:var(--rust); border-color:var(--rust);}
-
-/* ---- Phase 1: filter primitives (compact toolbar redesign) ---- */
-.filters-compact{padding-block:14px;}
-.filter-record-count{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); margin-inline-end:auto; margin-inline-start:14px; white-space:nowrap;}
-.filter-record-count b{color:var(--navy); font-weight:700;}
-.filter-loading{font-family:var(--font-mono); font-size:11px; color:var(--gold); display:flex; align-items:center; gap:6px;}
-.filter-loading.hidden{display:none;}
-.filter-loading::before{content:''; width:9px; height:9px; border-radius:50%; border:2px solid var(--gold); border-top-color:transparent; animation:spin .7s linear infinite;}
-
-/* Single dense, wrapping row holding every control — replaces the old
-   4-section / labeled-group layout so the panel reads like a compact
-   BI toolbar instead of a tall form. */
-.filter-toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px;}
-.filter-divider{width:1px; align-self:stretch; min-height:24px; background:var(--line); margin:0 2px;}
-
-.ms-option-single{font-weight:600; color:var(--ink-soft);}
-.ms-option-single:hover{background:var(--paper); color:var(--navy);}
-.ms-option-single.selected{background:var(--gold-soft); color:var(--navy); font-weight:700;}
-
-.recorded-badge{font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:7px; border:1px dashed var(--line); background:var(--paper); color:var(--ink-faint); cursor:help; white-space:nowrap;}
-
-/* Arabic clarity fix: the filter panel uses the monospace stack (SF Mono/
-   Consolas) for its data-dense look, but that stack has no real Arabic
-   glyphs — in RTL mode the browser falls back to a thin generic font.
-   Switch the panel to Cairo (already loaded, weights 400/600/700) with a
-   heavier weight whenever the page is RTL, so Arabic filter labels read
-   as clearly as the English ones do. */
-html[dir="rtl"] #filterPanel .filters-title,
-html[dir="rtl"] #filterPanel .filter-record-count,
-html[dir="rtl"] #filterPanel .filter-loading,
-html[dir="rtl"] #filterPanel .ms-btn,
-html[dir="rtl"] #filterPanel .ms-search,
-html[dir="rtl"] #filterPanel .ms-actions,
-html[dir="rtl"] #filterPanel .ms-option,
-html[dir="rtl"] #filterPanel .ms-empty,
-html[dir="rtl"] #filterPanel .recorded-badge,
-html[dir="rtl"] #filterPanel .toolbar-search input,
-html[dir="rtl"] #filterPanel .reset-btn{
-  font-family: var(--font-body-ar);
-  font-weight: 600;
-}
-html[dir="rtl"] #filterPanel .ms-btn{ font-weight:700; }
-
-.ms-slot{position:relative;}
-.ms-dropdown{position:relative; display:inline-block;}
-.ms-btn{font-family:var(--font-mono); font-size:11.5px; padding:6px 10px; border-radius:7px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer; min-width:96px; max-width:150px; text-align:start; display:flex; justify-content:space-between; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.2;}
-.ms-btn:hover{border-color:var(--gold);}
-.ms-btn::after{content:'▾'; color:var(--ink-faint); font-size:9px; flex-shrink:0;}
-.ms-btn.narrowed{border-color:var(--gold); color:var(--navy); font-weight:600;}
-.ms-panel{position:absolute; z-index:20; top:calc(100% + 4px); inset-inline-start:0; width:240px; max-height:280px; background:var(--card); border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow); padding:8px; display:flex; flex-direction:column; gap:6px;}
-.ms-panel-single{width:170px; padding:4px;}
-.ms-panel.hidden{display:none;}
-.ms-search{font-size:12.5px; padding:6px 9px; border-radius:6px; border:1px solid var(--line); background:var(--paper); color:var(--ink); width:100%;}
-.ms-actions{display:flex; gap:8px; font-family:var(--font-mono); font-size:10.5px;}
-.ms-actions button{background:none; border:none; color:var(--gold); cursor:pointer; padding:0; font-weight:700; text-transform:uppercase; letter-spacing:.05em;}
-.ms-actions button:hover{text-decoration:underline;}
-.ms-list{overflow-y:auto; max-height:190px; display:flex; flex-direction:column; gap:2px;}
-.ms-option{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink); padding:4px 4px; border-radius:5px; cursor:pointer;}
-.ms-option:hover{background:var(--paper);}
-.ms-option input{cursor:pointer;}
-.ms-empty{font-size:11.5px; color:var(--ink-faint); padding:8px 4px; text-align:center;}
-
-.recorded-badge{font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:7px; border:1px dashed var(--line); background:var(--paper); color:var(--ink-faint); cursor:help; white-space:nowrap;}
-
-.toolbar-search{flex:1 1 180px; min-width:160px; max-width:260px;}
-.toolbar-search input{width:100%; font-size:12px; padding:6px 10px; border-radius:7px; border:1px solid var(--line); background:var(--paper); color:var(--ink); font-family:var(--font-body);}
-.toolbar-search input:focus{outline:2px solid var(--gold); outline-offset:1px;}
-
-.af-chip{position:relative; padding-inline-end:22px;}
-.af-chip-clear{position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%); cursor:pointer; color:rgba(255,255,255,0.65); font-size:12px; line-height:1;}
-.af-chip-clear:hover{color:#fff;}
-
-@media (max-width:900px){
-  .ms-btn{max-width:120px;}
-  .toolbar-search{flex-basis:100%; max-width:none; order:99;}
-}
-@media (max-width:480px){
-  .filter-record-count{white-space:normal; margin-inline-start:0; flex-basis:100%; order:3;}
-  .reset-btn{order:2;}
-}
-
-.driver-search{position:relative;}
-.driver-search input{font-size:13px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:var(--paper); color:var(--ink); width:210px; padding-inline-start:32px;}
-.driver-search input:focus{outline:2px solid var(--gold); outline-offset:1px;}
-.driver-search::before{content:"⌕"; position:absolute; inset-inline-start:11px; top:50%; transform:translateY(-50%); color:var(--ink-faint); font-size:15px;}
-
-.kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:16px;}
-.kpi{background:var(--card); border:1px solid var(--line); border-radius:var(--radius-sm); padding:17px 18px 15px; position:relative; box-shadow:var(--shadow-sm); transition:.18s ease; overflow:hidden;}
-.kpi:hover{transform:translateY(-3px); box-shadow:var(--shadow);}
-.kpi-icon{width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; margin-bottom:12px; background:var(--paper);}
-.kpi-icon svg{width:15px; height:15px;}
-.kpi-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); font-weight:700; margin-bottom:8px;}
-.kpi-value{font-family:var(--font-display); font-weight:600; font-size:23px; color:var(--navy); font-variant-numeric:tabular-nums; line-height:1;}
-.kpi-foot{display:flex; align-items:center; gap:6px; margin-top:9px; font-size:11px; font-family:var(--font-mono); color:var(--ink-soft);}
-.trend{display:inline-flex; align-items:center; gap:2px; font-weight:700; padding:1px 6px; border-radius:10px;}
-.trend.up{color:var(--teal); background:var(--teal-soft);}
-.trend.down{color:var(--rust); background:var(--rust-soft);}
-.trend.flat{color:var(--ink-faint); background:var(--paper);}
-
-.insight-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-bottom:16px;}
-.insight-card{background:var(--card); border:1px solid var(--line); border-inline-start:3px solid var(--gold); border-radius:var(--radius-sm); padding:14px 16px; box-shadow:var(--shadow-sm); transition:.15s;}
-.insight-card:hover{box-shadow:var(--shadow); transform:translateY(-2px);}
-.insight-tag{font-size:9.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--gold); font-weight:700; font-family:var(--font-mono); margin-bottom:6px;}
-.insight-main{font-family:var(--font-display); font-weight:600; font-size:15.5px; color:var(--navy); margin-bottom:3px; line-height:1.25;}
-.insight-sub{font-size:11.5px; color:var(--ink-soft); font-family:var(--font-mono);}
-
-.panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 24px 20px; margin-bottom:16px;}
-.panel-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; flex-wrap:wrap; gap:8px;}
-.panel-title{font-family:var(--font-display); font-weight:600; font-size:18px; color:var(--navy); display:flex; align-items:center; gap:8px;}
-.panel-title .badge{font-family:var(--font-mono); font-size:9.5px; padding:2px 8px; border-radius:10px; background:var(--gold-soft); color:var(--gold); font-weight:700; letter-spacing:.04em;}
-.panel-note{font-size:11.5px; color:var(--ink-faint); font-family:var(--font-mono);}
-.grid-2{display:grid; grid-template-columns:1.3fr 1fr; gap:16px;}
-.grid-2b{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
-.chart-box{width:100%; direction:ltr;}
-.chart-box svg{width:100%; height:auto; display:block; overflow:visible;}
-.chart-legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); margin-top:10px;}
-.chart-legend span{display:inline-flex; align-items:center; gap:6px;}
-.chart-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
-.axis-label{font-size:10px; fill:var(--ink-faint); font-family:var(--font-mono);}
-.bar-value{font-size:10.5px; fill:var(--ink-soft); font-family:var(--font-mono);}
-.grid-line{stroke:#EAEDE7; stroke-width:1;}
-.cat-label{font-size:11px; fill:var(--ink-soft);}
-.donut-pct{font-family:var(--font-display); font-weight:600;}
-
-.summary-panel{background:linear-gradient(160deg,#fff,var(--paper)); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 26px; margin-bottom:16px;}
-.summary-text{font-size:14px; line-height:1.75; color:var(--ink);}
-.summary-text b{color:var(--navy);}
-.summary-text .good{color:var(--teal); font-weight:700;}
-.summary-text .bad{color:var(--rust); font-weight:700;}
-
-.table-scroll{max-height:520px; overflow-y:auto; border-radius:var(--radius-sm);}
-table{width:100%; border-collapse:collapse; font-size:13px;}
-thead th{position:sticky; top:0; z-index:2; background:var(--card); text-align:start; font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
-  color:var(--ink-faint); font-weight:700; padding:10px 10px; border-bottom:2px solid var(--line); cursor:pointer; user-select:none; font-family:var(--font-mono);}
-thead th:hover{color:var(--gold);}
-thead th.active{color:var(--gold);}
-thead th .sort-arrow{opacity:.4; margin-inline-start:2px;}
-thead th.active .sort-arrow{opacity:1;}
-tbody td{padding:9px 10px; border-bottom:1px solid var(--line); color:var(--ink);}
-tbody tr{transition:.1s;}
-tbody tr:hover{background:var(--paper);}
-.rank{font-family:var(--font-mono); color:var(--ink-faint); font-size:12px;}
-.rank.top3{color:var(--gold); font-weight:700;}
-.name-cell{font-weight:600;}
-.bar-cell{display:flex; align-items:center; gap:8px;}
-.mini-bar{height:6px; border-radius:3px; background:var(--paper-deep); flex:1; overflow:hidden; min-width:50px;}
-.mini-bar-fill{height:100%; border-radius:3px;}
-.num{font-family:var(--font-mono); font-variant-numeric:tabular-nums; text-align:end;}
-.rate-badge{display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:700; font-family:var(--font-mono);}
-.rate-good{background:var(--teal-soft); color:var(--teal);}
-.rate-mid{background:var(--amber-soft); color:var(--amber);}
-.rate-bad{background:var(--rust-soft); color:var(--rust);}
-.table-toolbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
-.mini-search{position:relative;}
-.mini-search input{font-size:12.5px; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--paper); width:170px; padding-inline-start:28px;}
-.mini-search::before{content:"⌕"; position:absolute; inset-inline-start:9px; top:50%; transform:translateY(-50%); color:var(--ink-faint); font-size:13px;}
-.pagination{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:12px; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);}
-.pg-btn{background:var(--paper); border:1px solid var(--line); border-radius:7px; padding:5px 11px; cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--ink);}
-.pg-btn:hover:not(:disabled){border-color:var(--gold); color:var(--gold);}
-.pg-btn:disabled{opacity:.35; cursor:default;}
-.legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:var(--ink-soft); margin-bottom:14px;}
-.legend span{display:inline-flex; align-items:center; gap:6px;}
-.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
-
-.mini-lb-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
-.mini-lb h4{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin:0 0 10px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
-.mini-lb-row{display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px;}
-.mini-lb-row .rnk{width:20px; font-family:var(--font-mono); color:var(--ink-faint);}
-.mini-lb-row .nm{flex:1; font-weight:600; color:var(--ink);}
-.mini-lb-row .vl{font-family:var(--font-mono); color:var(--ink-soft);}
-
-.dq-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:14px;}
-.dq-item{background:var(--paper); border-radius:var(--radius-sm); padding:14px 16px;}
-.dq-item .dq-val{font-family:var(--font-display); font-weight:600; font-size:19px; color:var(--navy);}
-.dq-item .dq-lbl{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); margin-top:4px; font-family:var(--font-mono);}
-.dq-warn{background:var(--amber-soft); border-radius:var(--radius-sm); padding:10px 14px; font-size:12.5px; color:var(--amber); margin-bottom:10px; display:flex; gap:8px; align-items:center;}
-.dq-fill-row{display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink-soft); padding:6px 0; border-bottom:1px dashed var(--line);}
-.dq-fill-row b{color:var(--navy);}
-
-.ref-card{background:repeating-linear-gradient(135deg, var(--paper) 0 10px, var(--paper-deep) 10px 20px); border:1.5px dashed var(--line-dash); border-radius:var(--radius); padding:18px 20px;}
-.ref-card h4{font-family:var(--font-display); color:var(--ink-soft); margin:0 0 6px; font-size:15px;}
-.ref-card p{font-size:12px; color:var(--ink-faint); margin:0 0 10px; line-height:1.5;}
-.ref-table{width:100%; font-size:12px; border-collapse:collapse;}
-.ref-table td{padding:5px 6px; border-bottom:1px solid var(--line);}
-
-.rec-list{display:flex; flex-direction:column; gap:10px;}
-.rec-item{display:flex; gap:12px; align-items:flex-start; padding:12px 14px; background:var(--paper); border-radius:var(--radius-sm);}
-.rec-icon{width:26px; height:26px; border-radius:8px; background:var(--navy); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-.rec-icon svg{width:13px; height:13px;}
-.rec-text{font-size:13px; color:var(--ink); line-height:1.5;}
-.rec-text b{color:var(--navy);}
-
-.footer{display:flex; align-items:center; gap:16px; padding:20px 6px 4px; color:var(--ink-faint); font-family:var(--font-mono); font-size:11.5px; justify-content:space-between; flex-wrap:wrap;}
-.route-line{flex:1; height:1px; background:repeating-linear-gradient(90deg, var(--line-dash) 0 6px, transparent 6px 12px); position:relative;}
-.route-line::after{content:"✈"; position:absolute; inset-inline-end:0; top:-9px; color:var(--ink-faint); font-size:14px;}
-.empty-state{padding:40px 20px; text-align:center; color:var(--ink-faint); font-family:var(--font-mono); font-size:13px;}
-
-@media (max-width:1100px){
-  .kpi-row{grid-template-columns:repeat(3,1fr);}
-  .grid-2, .grid-2b, .mini-lb-grid, .dq-grid{grid-template-columns:1fr;}
-  .exec-header{flex-direction:column;}
-  .header-right{align-items:flex-start; width:100%; flex-direction:row; justify-content:space-between;}
-}
-@media (max-width:640px){ .kpi-row{grid-template-columns:repeat(2,1fr);} }
-/* ---- Phase 1 report: Management Report overlay ---- */
-body.report-open{overflow:hidden;}
-.report-overlay{position:fixed; inset:0; background:rgba(16,27,48,0.55); z-index:100; display:flex; align-items:flex-start; justify-content:center; padding:32px 16px; overflow-y:auto;}
-.report-overlay.hidden{display:none;}
-.report-modal{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-lg); width:100%; max-width:980px; margin-bottom:32px;}
-.report-header{display:flex; align-items:center; gap:14px; padding:20px 26px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--card); border-radius:var(--radius) var(--radius) 0 0; z-index:2;}
-.report-brand{display:flex; flex-direction:column; gap:2px;}
-.report-brand-name{font-family:var(--font-display); font-weight:700; font-size:15px; letter-spacing:.06em; color:var(--gold);}
-.report-brand-sub{font-size:18px; font-weight:700; color:var(--navy);}
-.report-generated{font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); margin-inline-start:auto; white-space:nowrap;}
-html[dir="rtl"] .report-generated{font-family:var(--font-body-ar); font-weight:600;}
-.report-close{background:var(--paper); border:1px solid var(--line); border-radius:8px; width:32px; height:32px; cursor:pointer; color:var(--ink-soft); font-size:14px; line-height:1;}
-.report-close:hover{border-color:var(--gold); color:var(--navy);}
-.report-export-btn{display:flex; align-items:center; gap:6px; background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:7px 14px; font-size:12.5px; font-weight:700; color:var(--ink-soft); cursor:pointer; white-space:nowrap; font-family:inherit;}
-.report-export-btn:hover{border-color:var(--gold); color:var(--navy);}
-.report-export-btn svg{width:13px; height:13px;}
-html[dir="rtl"] .report-export-btn{font-family:var(--font-body-ar);}
-.report-body{padding:22px 26px 30px;}
-.report-print-footer{display:none;}
-.report-section{margin-bottom:26px;}
-.report-section-title{font-family:var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--gold); font-weight:700; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--line);}
-html[dir="rtl"] .report-section-title{font-family:var(--font-body-ar);}
-
-.report-scope-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:10px 20px;}
-.report-scope-item{display:flex; flex-direction:column; gap:2px; font-size:13px;}
-.report-scope-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700;}
-.report-scope-value{color:var(--ink); font-weight:600;}
-
-/* ---- Phase 5: Executive Cover ---- */
-.report-cover{padding:8px 4px 28px; margin-bottom:8px; border-bottom:2px solid var(--navy); text-align:center;}
-.report-cover-brand{font-family:var(--font-mono); font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:700; margin-bottom:8px;}
-.report-cover-subtitle{font-family:var(--font-display); font-size:26px; color:var(--navy); font-weight:700; margin-bottom:18px;}
-html[dir="rtl"] .report-cover-subtitle{font-family:var(--font-body-ar);}
-.report-cover-meta{display:inline-flex; flex-direction:column; gap:6px; text-align:start; min-width:320px;}
-.report-cover-meta-row{display:flex; justify-content:space-between; gap:18px; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--line);}
-.report-cover-meta-label{color:var(--ink-faint); text-transform:uppercase; font-size:10.5px; letter-spacing:.06em; font-weight:700; font-family:var(--font-mono); flex:0 0 auto;}
-.report-cover-meta-value{color:var(--ink); font-weight:600; text-align:end;}
-
-/* ---- Phase 5: Management Message ---- */
-.report-mgmt-message{background:var(--gold-soft); border-inline-start:3px solid var(--gold); border-radius:var(--radius-sm); padding:16px 18px;}
-.report-mgmt-message .report-section-title{border-bottom:none; padding-bottom:0; margin-bottom:8px;}
-.report-mgmt-message-list{margin:0; padding-inline-start:20px; display:flex; flex-direction:column; gap:6px;}
-.report-mgmt-message-list li{font-size:13.5px; color:var(--ink); line-height:1.5;}
-
-.report-kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px;}
-.report-kpis-compact{grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); margin-bottom:14px;}
-.report-kpi{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 16px;}
-.report-kpi-label{font-size:11px; color:var(--ink-soft); margin-bottom:6px;}
-.report-kpi-value{font-size:22px; font-weight:700; color:var(--navy); font-family:var(--font-mono);}
-html[dir="rtl"] .report-kpi-value{font-family:var(--font-body-ar);}
-.report-kpi-delta{margin-top:6px; font-size:11.5px; font-weight:700; font-family:var(--font-mono);}
-.report-kpi-delta.improved{color:var(--teal);}
-.report-kpi-delta.declined{color:var(--rust);}
-.report-kpi-delta.neutral{color:var(--ink-soft);}
-
-.report-grid-2{display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:14px;}
-.report-grid-2 .panel{margin-bottom:0;}
-
-/* ---- Phase 5: Best Performers / Areas Requiring Attention ---- */
-.report-best-attention{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px;}
-.report-best-attention-col{background:var(--paper); border-radius:var(--radius-sm); padding:14px 16px; border:1px solid var(--line);}
-.report-best-attention-heading{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--line-dash);}
-.report-best-attention-heading.good{color:var(--teal);}
-.report-best-attention-heading.bad{color:var(--rust);}
-.report-best-attention-group{margin-bottom:10px;}
-.report-best-attention-group:last-child{margin-bottom:0;}
-.report-rank-group-title{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:700; margin-bottom:4px;}
-.report-rank-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:3px;}
-.report-rank-list li{display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:12.5px; padding:2px 0;}
-.report-rank-name{color:var(--ink); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-
-.report-callout{background:var(--rust-soft); color:var(--rust); font-weight:700; font-size:12.5px; padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:14px;}
-
-.report-attention-item{display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:1px dashed var(--line);}
-.report-attention-item:last-child{border-bottom:none;}
-.report-attention-idx{flex:0 0 auto; width:22px; height:22px; border-radius:50%; background:var(--rust); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono);}
-.report-attention-label{font-weight:700; color:var(--navy); font-size:13.5px;}
-.report-attention-detail{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
-.report-attention-body{display:flex; flex-direction:column; gap:4px; flex:1;}
-.report-attention-issue{font-weight:700; color:var(--navy); font-size:13.5px;}
-.report-attention-evidence{font-size:12.5px; color:var(--ink-soft);}
-.report-attention-kicker{display:inline-block; font-family:var(--font-mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700; margin-inline-end:6px;}
-
-.report-insight-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:10px; margin-bottom:14px;}
-.report-rec-list{display:flex; flex-direction:column; gap:8px;}
-
-/* ---- Phase 4: A4 report print pipeline (native browser print, no
-   canvas/screenshot rendering — real HTML text + real SVG charts) ---- */
-@page{
-  size: A4 portrait;
-  margin: 14mm 12mm;
-}
-@media print{
-  html, body{background:#fff !important;}
-  body > *:not(.report-overlay){display:none !important;}
-  .report-overlay{position:static !important; background:none !important; padding:0 !important; overflow:visible !important; inset:auto !important;}
-  .report-modal{box-shadow:none !important; max-width:none !important; width:auto !important; margin:0 !important; border-radius:0 !important;}
-  .report-header{position:static !important; border-radius:0 !important;}
-  .report-body{padding:0 !important;}
-  .report-close, .report-export-btn, .filters, .kpi-row{display:none !important;}
-
-  /* Report footer: hidden on screen (see .report-print-footer above),
-     shown only for print. */
-  .report-print-footer{display:flex !important; justify-content:space-between; gap:12px;
-    margin-top:18px; padding-top:10px; border-top:1px solid var(--line);
-    font-size:10px; color:var(--ink-faint); font-family:var(--font-mono);}
-  html[dir="rtl"] .report-print-footer{font-family:var(--font-body-ar);}
-
-  /* Layout: single column so nothing gets squeezed into overflow/clipping. */
-  .report-summary-layout{display:block !important;}
-  .report-donut-block{width:140px !important; margin:0 auto 10px;}
-  .report-grid-2{display:block !important;}
-  .report-grid-2 .panel{margin-bottom:14px !important;}
-  .report-kpis{grid-template-columns:repeat(auto-fit, minmax(105px,1fr)) !important; gap:8px !important;}
-  .report-best-attention{grid-template-columns:1fr 1fr !important;}
-  .report-cover{break-inside:avoid; page-break-inside:avoid;}
-  .report-mgmt-message, .report-best-attention, .report-callout{break-inside:avoid; page-break-inside:avoid;}
-
-  /* Tables: repeating headers, no horizontal overflow, readable size. */
-  table{width:100% !important; font-size:10.5px;}
-  thead{display:table-header-group;}
-  tr{page-break-inside:avoid; break-inside:avoid;}
-  .comparison-table-scroll{overflow:visible !important;}
-  .comparison-table-scroll table{min-width:0 !important;}
-
-  /* Keep headings attached to their content and avoid awkward splits. */
-  .report-section{page-break-inside:avoid; break-inside:avoid;}
-  .report-section-title, .panel-title, .panel-head{page-break-after:avoid; break-after:avoid;}
-  .panel, .report-kpi, .comparison-kpi, .insight-card, .rec-item, .report-attention-item{page-break-inside:avoid; break-inside:avoid;}
-
-  /* Charts already use viewBox + width:100%/height:auto (see .chart-box
-     rules above) so they scale to the printed page width automatically —
-     no size overrides needed here. */
-
-  /* Comparison section only ever exists in the DOM when Comparison Mode
-     is ON (renderComparisonSection() in reportPreview.js returns '' when
-     data.comparison is null) — nothing extra to hide/show here for it. */
-}
-/* ---- Phase 2: Comparison Engine ---- */
-.comparison-panel{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px 26px; margin-bottom:16px;}
-.comparison-header{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
-.comparison-toggle-btn{cursor:pointer; border:none;}
-.comparison-toggle-btn.on{background:var(--navy);}
-.comparison-periods{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
-.comparison-periods.hidden{display:none;}
-.comparison-period-block{display:flex; align-items:center; gap:8px;}
-.comparison-period-tag{font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); font-weight:700;}
-.comparison-period-value{font-weight:700; color:var(--navy); font-size:13px; font-family:var(--font-mono);}
-.comparison-vs{font-family:var(--font-mono); font-size:11px; color:var(--gold); font-weight:700; text-transform:uppercase;}
-.comparison-select{font-family:var(--font-mono); font-size:12px; padding:6px 9px; border-radius:7px; border:1px solid var(--line); background:var(--paper); color:var(--ink); cursor:pointer;}
-.comparison-arrow{color:var(--ink-faint); font-size:12px;}
-
-.comparison-body{margin-top:18px; padding-top:16px; border-top:1px dashed var(--line);}
-.comparison-body.hidden{display:none;}
-.comparison-section{margin-bottom:22px;}
-.comparison-section:last-child{margin-bottom:0;}
-.comparison-section-title{font-family:var(--font-mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--gold); font-weight:700; margin-bottom:10px;}
-
-.comparison-kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
-.comparison-kpi{background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px;}
-.comparison-kpi-label{font-size:11px; color:var(--ink-soft); margin-bottom:6px;}
-.comparison-kpi-values{display:flex; align-items:baseline; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
-.comparison-kpi-current{font-size:19px; font-weight:700; color:var(--navy); font-family:var(--font-mono);}
-.comparison-kpi-previous{font-size:12px; color:var(--ink-faint); font-family:var(--font-mono);}
-.comparison-kpi-change{display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; font-family:var(--font-mono);}
-.comparison-kpi-change.improved{color:var(--teal);}
-.comparison-kpi-change.declined{color:var(--rust);}
-.comparison-kpi-change.neutral{color:var(--ink-soft);}
-
-.comparison-badge-insufficient{font-size:10.5px; color:var(--ink-faint); font-style:italic;}
-.comparison-onlyin-badge{font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; padding:1px 6px; border-radius:4px; background:var(--paper); border:1px solid var(--line); color:var(--ink-faint); margin-inline-start:6px; white-space:nowrap;}
-.comparison-insight-list{display:flex; flex-direction:column; gap:8px;}
-.comparison-insight-item{background:var(--paper); border-inline-start:3px solid var(--gold); border-radius:6px; padding:9px 12px; font-size:13px; color:var(--ink);}
-
-.comparison-table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
-.comparison-table-scroll table{min-width:520px;}
-
-html[dir="rtl"] .comparison-panel *{font-family:var(--font-body-ar);}
-html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, html[dir="rtl"] .comparison-period-tag, html[dir="rtl"] .comparison-period-value{font-weight:700;}
-
-@media (max-width:700px){
-  .comparison-header{flex-direction:column; align-items:flex-start;}
-  .comparison-periods{width:100%;}
-  .report-best-attention{grid-template-columns:1fr;}
-  .report-cover-meta{min-width:0; width:100%;}
-  .report-cover-meta-row{flex-direction:column; gap:2px;}
-  .report-cover-meta-value{text-align:start;}
-  .report-header{flex-wrap:wrap; row-gap:8px;}
-  .report-export-btn span{display:none;}
-}
-/* ---- Phase 3: report chart layout (reuses .chart-box/.chart-legend/.panel from the dashboard) ---- */
-.report-summary-layout{display:flex; gap:24px; align-items:center; flex-wrap:wrap;}
-.report-summary-layout .report-kpis{flex:1 1 340px;}
-.report-donut-block{flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:8px; width:180px;}
-.report-donut{max-width:180px;}
-.report-grid-2 .chart-box{margin-bottom:8px;}
-.report-grid-2 .chart-legend{margin-bottom:12px;}
-</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- نظام تصميم ARRIVE: الألوان والخطوط والمسافات في ملف واحد -->
+<link rel="stylesheet" href="tokens/arrive-tokens.css">
+<link rel="stylesheet" href="first-mile.css">
+<link rel="stylesheet" href="arrive-report.css">
 </head>
 <body>
 
-<div id="loadingScreen" class="state-screen">
+<div id="loadingScreen" class="state-screen" role="status" aria-live="polite">
+  <div class="state-logo-tile"><img src="brand/arrive-logo.png" alt="ARRIVE"></div>
   <div class="state-spinner"></div>
   <div class="state-title" data-i18n="loadingTitle">Loading live data…</div>
   <div class="state-sub" data-i18n="loadingSub">Fetching the latest sheet data from the Apps Script endpoint.</div>
 </div>
 
-<div id="errorScreen" class="state-screen hidden">
+<div id="errorScreen" class="state-screen hidden" role="alert">
+  <div class="state-error-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg></div>
   <div class="state-title" data-i18n="errorTitle">Couldn't load live data</div>
   <div class="state-sub" data-i18n="errorSub">Check that CONFIG.APPS_SCRIPT_URL is set correctly and the Apps Script is deployed with "Anyone" access.</div>
   <div class="state-code" id="errorDetail"></div>
@@ -534,7 +35,8 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   <div class="exec-header">
     <div>
       <div class="brand-row">
-        <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M3 12L11 4L21 12L11 20L3 12Z" stroke="#101B30" stroke-width="2" stroke-linejoin="round"/></svg></div>
+        <img class="brand-logo" src="brand/arrive-logo.png" alt="ARRIVE">
+        <div class="brand-divider"></div>
         <div class="brand-name" data-i18n="brandName">ARRIVE · Logistics Intelligence</div>
       </div>
       <h1 data-i18n="dashboardTitle">First Mile Intelligence Dashboard</h1>
@@ -548,10 +50,10 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
     </div>
     <div class="header-right">
       <div class="header-btn-row">
-        <div class="lang-btn" id="langBtn">EN / عربي</div>
-        <div class="export-btn" id="refreshBtn"><svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0115.3-6.4M21 12a9 9 0 01-15.3 6.4M3 5v5h5M21 19v-5h-5"/></svg><span data-i18n="refreshBtn">Refresh</span></div>
-        <div class="export-btn" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span data-i18n="exportBtn">Export CSV</span></div>
-        <div class="export-btn" id="reportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M8 13h8M8 17h8M8 9h3"/></svg><span data-i18n="managementReportBtn">Management Report</span></div>
+        <div class="lang-btn" id="langBtn" role="button" tabindex="0" data-i18n="langSwitch">English</div>
+        <div class="export-btn" id="refreshBtn" role="button" tabindex="0"><svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0115.3-6.4M21 12a9 9 0 01-15.3 6.4M3 5v5h5M21 19v-5h-5"/></svg><span data-i18n="refreshBtn">Refresh</span></div>
+        <div class="export-btn" id="exportBtn" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span data-i18n="exportBtn">Export CSV</span></div>
+        <div class="export-btn primary" id="reportBtn" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M8 13h8M8 17h8M8 9h3"/></svg><span data-i18n="managementReportBtn">Management Report</span></div>
       </div>
       <div class="record-stamp"><div class="record-count" id="totalRecordsLabel">—</div><div class="record-label" data-i18n="totalRequestsFooter">Total Logged Requests</div></div>
     </div>
@@ -607,7 +109,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
           <span class="comparison-period-tag" data-i18n="comparisonCurrentPeriod">Current Period</span>
           <span class="comparison-period-value" id="comparisonPeriodALabel"></span>
         </div>
-        <span class="comparison-vs">vs</span>
+        <span class="comparison-vs" data-i18n="vsWord">vs</span>
         <div class="comparison-period-block">
           <span class="comparison-period-tag" data-i18n="comparisonComparePeriod">Compare With</span>
           <select id="comparisonFromSelect" class="comparison-select"></select>
@@ -631,18 +133,27 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
     <div class="summary-text" id="summaryText">—</div>
   </div>
 
+  <div class="panel" id="attentionPanel">
+    <div class="panel-head">
+      <div class="panel-title" data-i18n="attentionTitle">ما يحتاج انتباه الإدارة</div>
+      <div class="panel-note" data-i18n="attentionNote"></div>
+    </div>
+    <div class="attention-grid" id="attentionGrid"></div>
+    <div class="panel-note" id="attentionMinNote" style="margin-top:12px;"></div>
+  </div>
+
   <div class="insight-row" id="insightRow"></div>
 
   <div class="panel">
     <div class="panel-head"><div class="panel-title" data-i18n="monthlyVolumeTitle">Monthly Volume &amp; Success Rate</div><div class="panel-note" id="monthlyPanelNote">—</div></div>
     <div class="chart-box" id="monthlyChart"></div>
-    <div class="chart-legend"><span><i style="background:#0F7A6C"></i><span data-i18n="doneLegend">Done</span></span><span><i style="background:#C1432E"></i><span data-i18n="failLegend">Fail</span></span><span><i style="background:#C8912B"></i><span data-i18n="successRateLegend">Success rate (line)</span></span></div>
+    <div class="chart-legend"><span><i class="lg-done"></i><span data-i18n="doneLegend">Done</span></span><span><i class="lg-fail"></i><span data-i18n="failLegend">Fail</span></span><span><i class="lg-rate"></i><span data-i18n="successRateLegend">Success rate (line)</span></span></div>
   </div>
 
   <div class="grid-2">
     <div class="panel"><div class="panel-head"><div class="panel-title" data-i18n="cityPerformanceTitle">City Performance</div><div class="panel-note" data-i18n="doneVsFailNote">Done vs. Fail, by city</div></div>
       <div class="chart-box" id="cityChart"></div>
-      <div class="chart-legend"><span><i style="background:#0F7A6C"></i><span data-i18n="doneLegend">Done</span></span><span><i style="background:#C1432E"></i><span data-i18n="failLegend">Fail</span></span></div>
+      <div class="chart-legend"><span><i class="lg-done"></i><span data-i18n="doneLegend">Done</span></span><span><i class="lg-fail"></i><span data-i18n="failLegend">Fail</span></span></div>
     </div>
     <div class="panel"><div class="panel-head"><div class="panel-title" data-i18n="requestTypeSplitTitle">Request Type Split</div><div class="panel-note" data-i18n="shareOfVolumeNote">Share of manifest volume</div></div>
       <div class="chart-box" id="typeChart"></div><div class="chart-legend" id="typeLegend"></div>
@@ -666,7 +177,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   <div class="panel">
     <div class="panel-head"><div class="panel-title"><span data-i18n="courierLeaderboardTitle">Courier Leaderboard</span> <span class="badge" data-i18n="sortableBadge">SORTABLE</span></div><div class="panel-note" id="driverPanelNote">—</div></div>
     <div class="table-toolbar">
-      <div class="legend" style="margin-bottom:0;"><span><i style="background:var(--teal)"></i>≥ 90%</span><span><i style="background:var(--amber)"></i>75–90%</span><span><i style="background:var(--rust)"></i>&lt; 75%</span></div>
+      <div class="legend table-legend"><span><i class="lg-good"></i><span data-i18n="legGood">90% or higher</span></span><span><i class="lg-mid"></i><span data-i18n="legMid">75% to below 90%</span></span><span><i class="lg-bad"></i><span data-i18n="legBad">Below 75%</span></span></div>
       <div class="mini-search"><input type="text" id="driverTableSearch" data-i18n-placeholder="filterTablePlaceholder" placeholder="Filter table…"></div>
     </div>
     <div class="table-scroll">
@@ -684,8 +195,8 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   <div class="panel">
     <div class="panel-head"><div class="panel-title"><span data-i18n="topBottomTitle">Top 10 / Bottom 10 Couriers</span> <span class="badge" data-i18n="min15Badge">MIN 15 REQ</span></div><div class="panel-note" data-i18n="bySuccessRateNote">By success rate, current filter</div></div>
     <div class="mini-lb-grid">
-      <div class="mini-lb"><h4 style="color:var(--teal)">▲ <span data-i18n="topByRate">Top 10 by Success Rate</span></h4><div id="topDriversList"></div></div>
-      <div class="mini-lb"><h4 style="color:var(--rust)">▼ <span data-i18n="bottomByRate">Bottom 10 by Success Rate</span></h4><div id="bottomDriversList"></div></div>
+      <div class="mini-lb"><h4 class="good">▲ <span data-i18n="topByRate">Top 10 by Success Rate</span></h4><div id="topDriversList"></div></div>
+      <div class="mini-lb"><h4 class="bad">▼ <span data-i18n="bottomByRate">Bottom 10 by Success Rate</span></h4><div id="bottomDriversList"></div></div>
     </div>
   </div>
 
@@ -727,7 +238,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   </div>
 
   <div class="grid-2b">
-    <div class="panel" style="margin-bottom:0;">
+    <div class="panel">
       <div class="panel-head"><div class="panel-title" data-i18n="recommendationsTitle">Operational Recommendations</div><div class="panel-note" data-i18n="autoGenNote">Auto-generated</div></div>
       <div class="rec-list" id="recList"></div>
     </div>
@@ -746,8 +257,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   </div>
 
   <div class="footer">
-    <span data-i18n="footerBrand">FIRST MILE LOGISTICS · ARRIVE</span>
-    <div class="route-line"></div>
+    <span class="footer-brand"><span class="logo-tile"><img src="brand/arrive-logo.png" alt="ARRIVE"></span><span data-i18n="footerBrand">FIRST MILE LOGISTICS · ARRIVE</span></span>
     <span id="footerStamp" data-i18n="footerStamp">GENERATED FROM PICKUP REQUEST, CUSTOMER DATA &amp; COURIER DATA INFO SHEETS · LIVE</span>
   </div>
 
@@ -762,7 +272,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
 <div class="report-overlay hidden" id="reportOverlay">
   <div class="report-modal">
     <div class="report-header">
-      <div class="report-brand"><span class="report-brand-name">ARRIVE</span><span class="report-brand-sub" data-i18n="reportTitle">First Mile Management Report</span></div>
+      <div class="report-brand"><span class="report-logo-tile"><img src="brand/arrive-logo.png" alt="ARRIVE"></span><span class="report-brand-sub" data-i18n="reportTitle">First Mile Management Report</span></div>
       <div class="report-generated" id="reportGeneratedLabel"></div>
       <button type="button" class="report-export-btn" id="reportExportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M9 15l3 3 3-3M12 11v7"/></svg><span data-i18n="reportExportBtn">Export PDF</span></button>
       <button type="button" class="report-close" id="reportCloseBtn" aria-label="Close">✕</button>
@@ -793,6 +303,7 @@ html[dir="rtl"] .comparison-kpi-current, html[dir="rtl"] .comparison-select, htm
   and wiring everything above together.
 -->
 <script src="config.js"></script>
+<script src="arrive-ds.js"></script>
 <script src="arrive-data-service.js"></script>
 <script src="i18n.js"></script>
 <script src="formatters.js"></script>

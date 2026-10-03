@@ -27,22 +27,22 @@ window.DashboardCharts = (function(){
         svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:y,y2:y,class:'grid-line'}));
         const lbl=svgEl('text',{x:marginL-8,y:y+3,'text-anchor':'end',class:'axis-label'}); lbl.textContent=Math.round(val).toLocaleString('en-US'); svg.appendChild(lbl); }
       for(let g=0; g<=4; g++){ const val=100*g/4; const y=marginT+plotH-(val/100)*plotH;
-        const lbl=svgEl('text',{x:W-marginR+8,y:y+3,'text-anchor':'start',class:'axis-label'}); lbl.textContent=Math.round(val)+'%'; lbl.setAttribute('fill','#C8912B'); svg.appendChild(lbl); }
+        const lbl=svgEl('text',{x:W-marginR+8,y:y+3,'text-anchor':'start',class:'axis-label'}); lbl.textContent=Math.round(val)+'%'; lbl.setAttribute('fill',ArriveDS.color('rate')); svg.appendChild(lbl); }
       const bandW=plotW/n, barW=Math.min(bandW*0.46,34);
       labels.forEach((lab,i)=>{
         const cx=marginL+bandW*i+bandW/2, doneH=(doneArr[i]/maxTotal)*plotH, failH=(failArr[i]/maxTotal)*plotH, baseY=marginT+plotH;
-        if(doneArr[i]>0){ const r1=svgEl('rect',{x:cx-barW/2,y:baseY-doneH,width:barW,height:Math.max(doneH,0),fill:'#0F7A6C',rx:3});
+        if(doneArr[i]>0){ const r1=svgEl('rect',{x:cx-barW/2,y:baseY-doneH,width:barW,height:Math.max(doneH,0),fill:ArriveDS.color('done'),rx:3});
           const t1=svgEl('title',{}); t1.textContent=`${lab}: ${fmtNum(doneArr[i])} ${t('doneLegend')}`; r1.appendChild(t1); svg.appendChild(r1); }
-        if(failArr[i]>0){ const r2=svgEl('rect',{x:cx-barW/2,y:baseY-doneH-failH,width:barW,height:Math.max(failH,0),fill:'#C1432E',rx:3});
+        if(failArr[i]>0){ const r2=svgEl('rect',{x:cx-barW/2,y:baseY-doneH-failH,width:barW,height:Math.max(failH,0),fill:ArriveDS.color('fail'),rx:3});
           const t2=svgEl('title',{}); t2.textContent=`${lab}: ${fmtNum(failArr[i])} ${t('failLegend')}`; r2.appendChild(t2); svg.appendChild(r2); }
         const xl=svgEl('text',{x:cx,y:H-marginB+18,'text-anchor':'middle',class:'cat-label'}); xl.textContent=lab; svg.appendChild(xl);
       });
       let pathD='';
       labels.forEach((lab,i)=>{ const cx=marginL+bandW*i+bandW/2, rate=rateArr[i]; if(rate===null||rate===undefined) return; const y=marginT+plotH-(rate/100)*plotH; pathD += (pathD===''?'M':'L')+cx+','+y+' '; });
-      if(pathD){ const path=svgEl('path',{d:pathD.trim(),fill:'none',stroke:'#C8912B','stroke-width':2.5,'stroke-linecap':'round','stroke-linejoin':'round'}); svg.appendChild(path);
+      if(pathD){ const path=svgEl('path',{d:pathD.trim(),fill:'none',stroke:ArriveDS.color('rate'),'stroke-width':2.5,'stroke-linecap':'round','stroke-linejoin':'round'}); svg.appendChild(path);
         labels.forEach((lab,i)=>{ const rate=rateArr[i]; if(rate===null||rate===undefined) return; const cx=marginL+bandW*i+bandW/2, y=marginT+plotH-(rate/100)*plotH;
-          const dot=svgEl('circle',{cx,cy:y,r:4,fill:'#C8912B',stroke:'#fff','stroke-width':1.5}); const tt=svgEl('title',{}); tt.textContent=`${lab}: ${rate.toFixed(1)}%`; dot.appendChild(tt); svg.appendChild(dot); }); }
-      svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:marginT+plotH,y2:marginT+plotH,stroke:'#DEE3DA','stroke-width':1}));
+          const dot=svgEl('circle',{cx,cy:y,r:4,fill:ArriveDS.color('rate'),stroke:'#fff','stroke-width':1.5}); const tt=svgEl('title',{}); tt.textContent=`${lab}: ${rate.toFixed(1)}%`; dot.appendChild(tt); svg.appendChild(dot); }); }
+      svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:marginT+plotH,y2:marginT+plotH,stroke:ArriveDS.color('grid'),'stroke-width':1}));
       container.appendChild(svg);
     }
 
@@ -55,8 +55,8 @@ window.DashboardCharts = (function(){
       labels.forEach((lab,i)=>{
         const cy=marginT+rowH*i+rowH/2, barH=18, doneW=(doneArr[i]/maxTotal)*plotW, failW=(failArr[i]/maxTotal)*plotW;
         const lbl=svgEl('text',{x:marginL-10,y:cy+4,'text-anchor':'end',class:'cat-label'}); lbl.textContent=lab; svg.appendChild(lbl);
-        if(doneArr[i]>0){ const r1=svgEl('rect',{x:marginL,y:cy-barH/2,width:Math.max(doneW,0),height:barH,fill:'#0F7A6C',rx:3}); const t1=svgEl('title',{}); t1.textContent=`${lab}: ${fmtNum(doneArr[i])}`; r1.appendChild(t1); svg.appendChild(r1); }
-        if(failArr[i]>0){ const r2=svgEl('rect',{x:marginL+doneW,y:cy-barH/2,width:Math.max(failW,0),height:barH,fill:'#C1432E',rx:3}); const t2=svgEl('title',{}); t2.textContent=`${lab}: ${fmtNum(failArr[i])}`; r2.appendChild(t2); svg.appendChild(r2); }
+        if(doneArr[i]>0){ const r1=svgEl('rect',{x:marginL,y:cy-barH/2,width:Math.max(doneW,0),height:barH,fill:ArriveDS.color('done'),rx:3}); const t1=svgEl('title',{}); t1.textContent=`${lab}: ${fmtNum(doneArr[i])}`; r1.appendChild(t1); svg.appendChild(r1); }
+        if(failArr[i]>0){ const r2=svgEl('rect',{x:marginL+doneW,y:cy-barH/2,width:Math.max(failW,0),height:barH,fill:ArriveDS.color('fail'),rx:3}); const t2=svgEl('title',{}); t2.textContent=`${lab}: ${fmtNum(failArr[i])}`; r2.appendChild(t2); svg.appendChild(r2); }
         const totalLbl=svgEl('text',{x:marginL+doneW+failW+8,y:cy+4,class:'bar-value'}); totalLbl.textContent=fmtNum(totals[i]); svg.appendChild(totalLbl);
       });
       container.appendChild(svg);
@@ -95,7 +95,7 @@ window.DashboardCharts = (function(){
         angleStart=angleEnd;
         const legendItem=document.createElement('span'); legendItem.innerHTML=`<i style="background:${colors[i%colors.length]}"></i>${esc(lab)} — ${(frac*100).toFixed(0)}%`; legend.appendChild(legendItem);
       });
-      const centerLbl=svgEl('text',{x:cx,y:cy-4,'text-anchor':'middle',class:'donut-pct',fill:'#101B30','font-size':'22'}); centerLbl.textContent=fmtNum(total); svg.appendChild(centerLbl);
+      const centerLbl=svgEl('text',{x:cx,y:cy-4,'text-anchor':'middle',class:'donut-pct',fill:ArriveDS.color('navy'),'font-size':'22'}); centerLbl.textContent=fmtNum(total); svg.appendChild(centerLbl);
       const centerSub=svgEl('text',{x:cx,y:cy+16,'text-anchor':'middle',class:'axis-label'}); centerSub.textContent=t('requestsHeader'); svg.appendChild(centerSub);
       container.appendChild(svg);
     }
@@ -123,7 +123,7 @@ window.DashboardCharts = (function(){
         const t2=svgEl('title',{}); t2.textContent=`${lab}: ${fmtNum(seriesB[i])}`; r2.appendChild(t2); svg.appendChild(r2);
         const xl=svgEl('text',{x:bandCx,y:H-marginB+18,'text-anchor':'middle',class:'cat-label'}); xl.textContent=lab; svg.appendChild(xl);
       });
-      svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:marginT+plotH,y2:marginT+plotH,stroke:'#DEE3DA','stroke-width':1}));
+      svg.appendChild(svgEl('line',{x1:marginL,x2:W-marginR,y1:marginT+plotH,y2:marginT+plotH,stroke:ArriveDS.color('grid'),'stroke-width':1}));
       container.appendChild(svg);
     }
 
@@ -140,7 +140,7 @@ window.DashboardCharts = (function(){
       if(n===0){ const tx=svgEl('text',{x:W/2,y:24,'text-anchor':'middle',class:'axis-label'}); tx.textContent=t('noDataFilters'); svg.appendChild(tx); container.appendChild(svg); return; }
       const maxAbs = niceMax(Math.max(...values.map(v=>Math.abs(v)),1));
       const cx = marginL + plotW/2, halfW = plotW/2;
-      svg.appendChild(svgEl('line',{x1:cx,x2:cx,y1:marginT,y2:marginT+plotH,stroke:'#DEE3DA','stroke-width':1}));
+      svg.appendChild(svgEl('line',{x1:cx,x2:cx,y1:marginT,y2:marginT+plotH,stroke:ArriveDS.color('grid'),'stroke-width':1}));
       labels.forEach((lab,i)=>{
         const cy=marginT+rowH*i+rowH/2, barH=14;
         const v = values[i];

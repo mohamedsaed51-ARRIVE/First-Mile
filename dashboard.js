@@ -35,6 +35,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // can't reach them. Doesn't touch state or trigger a re-filter.
     if(window.__dashboardRefreshFilterUI) window.__dashboardRefreshFilterUI();
     if(window.__dashboardRender) window.__dashboardRender();
+    if(typeof refreshSyncLabel==='function') refreshSyncLabel();
   });
   applyStaticTranslations();
 
@@ -141,7 +142,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], driverBranch, salaryRef, meta } = DATA;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
-    const TYPE_COLORS = ['#C8912B','#0F7A6C','#101B30','#C1432E'];
+    const TYPE_COLORS = ArriveDS.typeColors();
 
     // PHASE 1: the canonical filtering engine — see filters.js. Built once
     // per dataset load; every filter-affecting function below reads
@@ -358,12 +359,17 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         {label:t('kpiCompliance'), icon:'compliance', value:complianceRate.toFixed(0)+'%', foot:t('footAllTimeOf',{n:fmtNum(recordedTotal)})}
       ];
       const kpiRow = document.getElementById('kpiRow'); kpiRow.innerHTML='';
-      kpis.forEach(k=>{ const el=document.createElement('div'); el.className='kpi fade-in';
-        el.innerHTML=`<div class="kpi-icon">${icon(k.icon,'#C8912B')}</div><div class="kpi-label">${esc(k.label)}</div><div class="kpi-value">${k.value}</div><div class="kpi-foot">${k.foot}</div>`;
+      // عرض فقط: لون الشريط العلوي ومؤشر النسبة، ولا يغيّر أي قيمة محسوبة.
+      const KPI_TONE = { done:'kpi-good', rate:'kpi-good', fail:'kpi-bad', total:'kpi-main' };
+      const KPI_BAR  = { rate:successRate, compliance:complianceRate };
+      kpis.forEach(k=>{ const el=document.createElement('div'); el.className='kpi fade-in '+(KPI_TONE[k.icon]||'');
+        const bar = KPI_BAR[k.icon]!==undefined ? `<div class="kpi-bar" aria-hidden="true"><i style="width:${Math.max(0,Math.min(100,KPI_BAR[k.icon]))}%"></i></div>` : '';
+        el.innerHTML=`<div class="kpi-top"><div class="kpi-icon">${icon(k.icon,ArriveDS.color('blue'))}</div><div class="kpi-label">${esc(k.label)}</div></div><div class="kpi-value">${k.value}</div>${bar}<div class="kpi-foot">${k.foot}</div>`;
         kpiRow.appendChild(el); });
 
       renderSummary(total, done, fail, fees, successRate, driverAgg, areaAgg, clientAgg, reasonAgg);
       renderInsights(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg);
+      renderAttention(driverAgg, areaAgg, cityAgg);
 
       const monthAgg = {};
       (state.periodMode==='multi' ? Array.from(state.selectedMonths) : Array.from({length:state.monthTo-state.monthFrom+1},(_,k)=>state.monthFrom+k))
@@ -383,13 +389,17 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
       const areaList = Object.keys(areaAgg).map(ai=>({idx:+ai, name:areas[ai], city:areaAgg[ai].city, count:areaAgg[ai].count, fees:areaAgg[ai].fees, done:areaAgg[ai].done}));
       const topByVolume = areaList.slice().sort((a,b)=>b.count-a.count).slice(0,10);
-      renderHBar('areaChart', topByVolume.map(a=>a.name.length>26?a.name.slice(0,24)+'…':a.name), topByVolume.map(a=>a.count), '#101B30');
+      renderHBar('areaChart', topByVolume.map(a=>a.name.length>26?a.name.slice(0,24)+'…':a.name), topByVolume.map(a=>a.count), ArriveDS.color('blue'));
       const topByFees = areaList.slice().sort((a,b)=>b.fees-a.fees).slice(0,10);
-      renderHBar('areaFeesChart', topByFees.map(a=>a.name.length>26?a.name.slice(0,24)+'…':a.name), topByFees.map(a=>a.fees), '#C8912B');
+      renderHBar('areaFeesChart', topByFees.map(a=>a.name.length>26?a.name.slice(0,24)+'…':a.name), topByFees.map(a=>a.fees), ArriveDS.color('teal'));
 
       const reasonList = Object.keys(reasonAgg).map(ri=>({name:reasons[ri], count:reasonAgg[ri]})).filter(r=>r.name!=='N/A').sort((a,b)=>b.count-a.count);
-      renderHBar('reasonChart', reasonList.map(r=>r.name), reasonList.map(r=>r.count), '#C1432E');
+      renderHBar('reasonChart', reasonList.map(r=>r.name), reasonList.map(r=>r.count), ArriveDS.color('fail'));
       document.getElementById('reasonPanelNote').textContent = reasonList.length ? t('failedReasonNote',{n:fmtNum(reasonList.reduce((a,b)=>a+b.count,0))}) : t('noFailedInRange');
+
+      // حالة فارغة موحّدة للرسوم عند عدم وجود بيانات مطابقة للفلاتر (عرض فقط)
+      if(total===0) document.querySelectorAll('#dashboardRoot .chart-box').forEach(b=>{ b.innerHTML=`<div class="empty-state">${esc(t('emptyFilters'))}</div>`; });
+      const lg=document.getElementById('typeLegend'); if(lg && total===0) lg.innerHTML='';
 
       renderTopBottomDrivers(driverAgg);
       renderRecommendations(driverAgg, areaAgg, cityAgg, reasonAgg, branchAgg);
@@ -480,6 +490,36 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       return cards;
     }
 
+
+    // ما يحتاج انتباه الإدارة — عرض فقط. يستخدم نفس rateClass (90% / 75%) ونفس
+    // حدود الحجم الأدنى المعتمدة أصلًا (MIN_QUALIFYING_*) على نفس المجمّعات
+    // المحسوبة؛ لا يُنشئ أي حد أو رقم جديد.
+    function renderAttention(driverAgg, areaAgg, cityAgg){
+      const grid = document.getElementById('attentionGrid'); if(!grid) return;
+      const groups = [
+        {key:'attGroupCities', rows:Object.keys(cityAgg).map(c=>({name:c, n:cityAgg[c].done+cityAgg[c].fail, rate:(cityAgg[c].done+cityAgg[c].fail)?cityAgg[c].done/(cityAgg[c].done+cityAgg[c].fail)*100:0})).filter(r=>r.n>=MIN_QUALIFYING_CITY_VOLUME)},
+        {key:'attGroupAreas', rows:Object.keys(areaAgg).map(ai=>({name:areas[ai], n:areaAgg[ai].count, rate:areaAgg[ai].count?areaAgg[ai].done/areaAgg[ai].count*100:0})).filter(r=>r.n>=MIN_QUALIFYING_CITY_VOLUME)},
+        {key:'attGroupCouriers', rows:Object.keys(driverAgg).map(di=>({name:drivers[di].trim(), n:driverAgg[di].count, rate:driverAgg[di].count?driverAgg[di].done/driverAgg[di].count*100:0})).filter(r=>r.n>=MIN_QUALIFYING_DRIVER_VOLUME)}
+      ];
+      const cols = [
+        {cls:'att-critical', badge:'status-violation', rc:'rate-bad',  title:'attCritical', hint:'attCriticalHint', list:true,  asc:true},
+        {cls:'att-watch',    badge:'status-under-action', rc:'rate-mid', title:'attWatch', hint:'attWatchHint', list:true, asc:true},
+        {cls:'att-ok',       badge:'status-success', rc:'rate-good', title:'attOk', hint:'attOkHint', list:false, asc:false}
+      ];
+      grid.innerHTML = cols.map(col=>{
+        const per = groups.map(g=>({key:g.key, items:g.rows.filter(r=>rateClass(r.rate)===col.rc).sort((a,b)=>col.asc?a.rate-b.rate:b.rate-a.rate)}));
+        const total = per.reduce((a,g)=>a+g.items.length,0);
+        const body = total===0 ? `<div class="attention-empty">${esc(t('attNone'))}</div>` : per.filter(g=>g.items.length).map(g=>{
+          const head = `<div class="attention-group">${esc(t(g.key))} (${fmtNum(g.items.length)})</div>`;
+          const lines = col.list ? g.items.slice(0,3).map(r=>`<div class="attention-line"><b>${esc(r.name)}</b><span class="attention-meta"><b>${r.rate.toFixed(1)}%</b><span>${fmtNum(r.n)} ${esc(t('reqUnit'))}</span></span></div>`).join('') : '';
+          return head+lines;
+        }).join('');
+        return `<div class="attention-col ${col.cls}"><div class="attention-head"><span class="status-badge ${col.badge}">${esc(t(col.title))}</span><span class="attention-count">${fmtNum(total)}</span></div><div class="attention-hint">${esc(t(col.hint))}</div>${body}</div>`;
+      }).join('');
+      const note = document.getElementById('attentionMinNote');
+      if(note) note.textContent = t('attMinNote',{c:MIN_QUALIFYING_CITY_VOLUME, d:MIN_QUALIFYING_DRIVER_VOLUME});
+    }
+
     function renderInsights(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg){
       const cards = computeInsightCards(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg);
       const row=document.getElementById('insightRow'); row.innerHTML='';
@@ -520,11 +560,19 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       Object.keys(cityAgg).forEach(c=>{ const tt=cityAgg[c].done+cityAgg[c].fail; if(tt>=MIN_QUALIFYING_CITY_VOLUME){ const rate=cityAgg[c].done/tt*100; if(rate<worstRate){worstRate=rate; worstCityName=c;} } });
       const reasonList = Object.keys(reasonAgg).map(ri=>({name:reasons[ri], count:reasonAgg[ri]})).filter(r=>r.name!=='N/A').sort((a,b)=>b.count-a.count);
 
-      if(topArea) items.push(t('recTopArea',{area:`<b>${esc(topArea.name)}</b>`, n:fmtNum(topArea.count)}));
-      if(topDriver) items.push(t('recTopDriver',{name:`<b>${esc(topDriver.name)}</b>`, n:fmtNum(topDriver.count), rate:topDriver.rate.toFixed(1)}));
-      if(worstCityName) items.push(t('recWorstCity',{city:`<b>${esc(worstCityName)}</b>`, rate:worstRate.toFixed(1)}));
-      if(feesArea) items.push(t('recFeesArea',{area:`<b>${esc(feesArea.name)}</b>`, fees:fmtCurrency(feesArea.fees)}));
-      if(reasonList[0] && reasonList[0].count>0) items.push(t('recTopReason',{reason:`<b>${esc(reasonList[0].name)}</b>`, n:fmtNum(reasonList[0].count)}));
+      // rows: نفس التوصيات مفصولة إلى «المشكلة» و«الإجراء» للتقرير فقط (action=null إذا لم يذكر النص الأصلي إجراءً).
+      const rows=[];
+      if(topArea){ items.push(t('recTopArea',{area:`<b>${esc(topArea.name)}</b>`, n:fmtNum(topArea.count)}));
+        rows.push({problem:t('recPTopArea',{area:esc(topArea.name), n:fmtNum(topArea.count)}), action:t('recATopArea')}); }
+      if(topDriver){ items.push(t('recTopDriver',{name:`<b>${esc(topDriver.name)}</b>`, n:fmtNum(topDriver.count), rate:topDriver.rate.toFixed(1)}));
+        rows.push({problem:t('recPTopDriver',{name:esc(topDriver.name), n:fmtNum(topDriver.count), rate:topDriver.rate.toFixed(1)}), action:null}); }
+      if(worstCityName){ items.push(t('recWorstCity',{city:`<b>${esc(worstCityName)}</b>`, rate:worstRate.toFixed(1)}));
+        rows.push({problem:t('recPWorstCity',{city:esc(worstCityName), rate:worstRate.toFixed(1)}), action:t('recAWorstCity')}); }
+      if(feesArea){ items.push(t('recFeesArea',{area:`<b>${esc(feesArea.name)}</b>`, fees:fmtCurrency(feesArea.fees)}));
+        rows.push({problem:t('recPFeesArea',{area:esc(feesArea.name), fees:fmtCurrency(feesArea.fees)}), action:null}); }
+      if(reasonList[0] && reasonList[0].count>0){ items.push(t('recTopReason',{reason:`<b>${esc(reasonList[0].name)}</b>`, n:fmtNum(reasonList[0].count)}));
+        rows.push({problem:t('recPTopReason',{reason:esc(reasonList[0].name), n:fmtNum(reasonList[0].count)}), action:t('recATopReason')}); }
+      items.rows = rows;
       return items;
     }
 
@@ -551,7 +599,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         {val: fmtNum(meta.uniqueDrivers), lbl:t('dqCouriers')},
         {val: fmtNum(meta.uniqueTypes), lbl:t('dqRequestTypes')}
       ];
-      grid.innerHTML = items.map(i=>`<div class="dq-item"><div class="dq-val">${i.val}</div><div class="dq-lbl">${esc(i.lbl)}</div></div>`).join('');
+      grid.innerHTML = items.map(i=>`<div class="dq-item"><div class="dq-val${String(i.val).length>12?' long':''}">${i.val}</div><div class="dq-lbl">${esc(i.lbl)}</div></div>`).join('');
       const warn = document.getElementById('dqWarnings');
       warn.innerHTML = (meta.partialMonths||[]).map(m=>`<div class="dq-warn">${t('dqPartialMonthWarn',{month:monthLabel(m)})}</div>`).join('');
       const fillRows = document.getElementById('dqFillRows');
@@ -705,7 +753,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
             <span class="comparison-kpi-current">${k.currentLabel}</span>
             <span class="comparison-kpi-previous">${esc(t('comparisonPreviousCol'))}: ${k.previousLabel}</span>
           </div>
-          <div class="comparison-kpi-change ${k.direction}">${arrowFor(k.direction)} ${k.changeLabel} (${k.pctLabel})</div>
+          <div class="comparison-kpi-change ${k.direction}">${arrowFor(k.direction)} <span class="ltr">${k.changeLabel} (${k.pctLabel})</span></div>
         </div>`).join('');
 
       const cityRows = cmp.cities.map(c=>`<tr><td>${esc(c.name)}${onlyInBadge(c.onlyIn)}</td><td class="num">${fmtNum(c.current)}</td><td class="num">${fmtNum(c.previous)}</td><td class="num">${c.change>=0?'+':''}${fmtNum(c.change)}</td><td class="num">${comparisonEngine.pctLabel(c.pct)}</td></tr>`);
@@ -713,7 +761,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const driverRows = cmp.drivers.map(d=>`<tr><td>${esc(d.name)}${onlyInBadge(d.onlyIn)}</td><td class="num">${fmtNum(d.current)}</td><td class="num">${fmtNum(d.previous)}</td><td class="num">${d.change>=0?'+':''}${fmtNum(d.change)}</td>
         <td class="num">${d.currentRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.currentRate.toFixed(1)+'%'}</td>
         <td class="num">${d.previousRate===null?`<span class="comparison-badge-insufficient">${esc(t('comparisonInsufficientVolume'))}</span>`:d.previousRate.toFixed(1)+'%'}</td>
-        <td class="num">${d.rateChange===null?'—':(d.rateChange>=0?'+':'')+d.rateChange.toFixed(1)+' pts'}</td></tr>`);
+        <td class="num">${d.rateChange===null?'—':(d.rateChange>=0?'+':'')+d.rateChange.toFixed(1)+' '+t('ptsUnit')}</td></tr>`);
       const reasonRows = cmp.reasons.map(r=>`<tr><td>${esc(r.name)}${onlyInBadge(r.onlyIn)}</td><td class="num">${fmtNum(r.current)}</td><td class="num">${fmtNum(r.previous)}</td><td class="num">${r.change>=0?'+':''}${fmtNum(r.change)}</td><td class="num">${comparisonEngine.pctLabel(r.pct)}</td></tr>`);
       const typeRows = cmp.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}${onlyInBadge(tp.onlyIn)}</td><td class="num">${fmtNum(tp.current)}</td><td class="num">${fmtNum(tp.previous)}</td><td class="num">${tp.change>=0?'+':''}${fmtNum(tp.change)}</td><td class="num">${comparisonEngine.pctLabel(tp.pct)}</td></tr>`);
 

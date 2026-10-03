@@ -64,7 +64,7 @@ window.DashboardComparison = (function(){
       const p = pctChange(current, previous);
       const fmtVal = opts.isCurrency ? fmtCurrency : (opts.isPercent ? (v=>v.toFixed(1)+'%') : fmtNum);
       const sign = change>=0 ? '+' : '−';
-      const changeLabel = opts.isPercent ? `${sign}${Math.abs(change).toFixed(1)} pts`
+      const changeLabel = opts.isPercent ? `${sign}${Math.abs(change).toFixed(1)} ${t('ptsUnit')}`
         : opts.isCurrency ? `${sign}${fmtCurrency(Math.abs(change))}`
         : `${sign}${fmtNum(Math.abs(change))}`;
       return {
