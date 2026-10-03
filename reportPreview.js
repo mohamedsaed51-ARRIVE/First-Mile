@@ -20,7 +20,11 @@ window.DashboardReportPreview = (function(){
    *     rather than re-implemented for the report.
    */
   function createReportPreview(deps){
-    const { overlayId, closeBtnId, bodyId, generatedLabelId, t, esc, fmtNum, fmtCurrency, rateClass, charts } = deps;
+    const { overlayId, closeBtnId, bodyId, generatedLabelId, tabsId, titleId, requestData, t, esc, fmtNum, fmtCurrency, rateClass, charts } = deps;
+    const REPORT_TYPES = DashboardReportAnalyticData.REPORT_TYPES;
+    const typeDef = key => REPORT_TYPES.find(x=>x.key===key) || REPORT_TYPES[0];
+    // آخر نوع تقرير مفتوح يبقى محفوظًا حتى بعد التحديث التلقائي للبيانات
+    let currentType = window.__reportType || 'management';
     const SECTION_ICON = '';
     const overlay = document.getElementById(overlayId);
     const body = document.getElementById(bodyId);
@@ -51,6 +55,9 @@ window.DashboardReportPreview = (function(){
       return `<div class="rp-sec-head"><span class="rp-sec-num">${n}</span><h2 class="rp-sec-title">${esc(title)}</h2></div>`;
     }
 
+    // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع)
+    const analytic = DashboardReportAnalytic.create({ t, esc, fmtNum, fmtCurrency, rateClass, sectionHeader, NA, charts });
+
     // الغلاف: صفحة كاملة بالأزرق الرسمي والشعار الرسمي مباشرة (بدون تعديل)
     function renderCover(data){
       const cmp = data.comparison;
@@ -58,8 +65,8 @@ window.DashboardReportPreview = (function(){
       return `<section class="rp-cover">
         <div class="rp-cover-top"><img class="rp-cover-logo" src="brand/arrive-logo.png" alt="ARRIVE"><span class="rp-cover-tag">${esc(t('reportConfidential'))}</span></div>
         <div class="rp-cover-main">
-          <div class="rp-cover-kicker">${esc(t('reportCoverKicker'))}</div>
-          <h1 class="rp-cover-title">${esc(t('reportCoverDocTitle'))}</h1>
+          <div class="rp-cover-kicker">${esc(data.type==='management' || !data.type ? t('reportCoverKicker') : t('rtKicker'))}</div>
+          <h1 class="rp-cover-title">${esc(data.type==='management' || !data.type ? t('reportCoverDocTitle') : t(typeDef(data.type).title))}</h1>
           <div class="rp-cover-rule"></div>
           <div class="rp-cover-meta">
             ${row(t('periodLabel'), esc(data.cover.periodLabel))}
@@ -288,7 +295,7 @@ window.DashboardReportPreview = (function(){
         ${sectionHeader(n, t('reportSecClosing'))}
         <p class="rp-lead">${esc(t('reportClosingLead'))}</p>
         ${data.managementMessage && data.managementMessage.length ? `<ul class="rp-callout-list rp-closing-list">${data.managementMessage.map(l=>`<li>${l}</li>`).join('')}</ul>` : ''}
-        <div class="rp-alert rp-alert-info">${esc(t('reportClosingTodo'))}</div>
+        <div class="rp-alert rp-alert-info">${esc(data.type && data.type!=='management' ? t('rtClosingTodo') : t('reportClosingTodo'))}</div>
         <div class="rp-signs">${sign(t('reportSignPrepared'))}${sign(t('reportSignReviewed'))}${sign(t('reportSignApproved'))}</div>
         <div class="rp-closing-foot">
           <div>${esc(t('reportDataSources'))}</div>
@@ -397,20 +404,39 @@ window.DashboardReportPreview = (function(){
 
     // يُحقن @page بنصوص اللغة الحالية: رأس الصفحة وترقيم "صفحة X من Y" (الغلاف بلا هوامش ولا رأس).
     function applyPageStyle(){
+      const def = typeDef(currentType);
+      const printTitle = def.print ? t(def.print) : 'ARRIVE — ' + t(def.title);
       let st = document.getElementById('reportPageStyle');
       if(!st){ st = document.createElement('style'); st.id = 'reportPageStyle'; document.head.appendChild(st); }
       const q = txt => '"' + String(txt).replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
       st.textContent = `
-        @page{ @top-center{ content:${q(t('reportPrintFooterBrand'))}; } @bottom-center{ content:${q(t('reportPage'))} " " counter(page) " " ${q(t('reportOf'))} " " counter(pages); } }
+        @page{ @top-center{ content:${q(printTitle)}; } @bottom-center{ content:${q(t('reportPage'))} " " counter(page) " " ${q(t('reportOf'))} " " counter(pages); } }
         @page cover{ @top-center{ content:none; } @bottom-center{ content:none; } }`;
     }
 
-    function render(data){
-      lastData = data;
-      generatedLabel.textContent = t('reportGeneratedOn',{date: fmtStamp(data.generatedAt)});
+    // تبويبات أنواع التقارير داخل رأس النافذة (تُعاد كتابتها عند كل عرض لتتبع اللغة)
+    function renderTabs(){
+      const el = document.getElementById(tabsId);
+      if(!el) return;
+      el.setAttribute('aria-label', t('rtTabsAria'));
+      el.innerHTML = REPORT_TYPES.map(def=>`<button type="button" role="tab" class="report-tab" data-report-type="${def.key}" aria-selected="${def.key===currentType}">${esc(t(def.tab))}</button>`).join('');
+    }
+    function renderAnalyticReport(data){
+      let n = 0; const next = ()=> ++n;
+      return [
+        renderCover(data),
+        analytic.renderSummary(data, next()),
+        renderScope(data.scope, next()),
+        analytic.renderBody(data, next),
+        renderFindings(data.findings, next()),
+        analytic.renderNotes(data.notes, next()),
+        renderClosing(data, next())
+      ].join('');
+    }
+    function renderManagementReport(data){
       let n = 0;
       const next = ()=> ++n;
-      body.innerHTML = [
+      return [
         renderCover(data),
         renderSummary(data.summary, data.comparison, data.managementMessage, next()),
         renderScope(data.scope, next()),
@@ -423,8 +449,20 @@ window.DashboardReportPreview = (function(){
         renderDetailedTables(data.performance, next()),
         renderClosing(data, next())
       ].join('');
+    }
+
+    function render(data){
+      lastData = data;
+      currentType = data.type || 'management';
+      window.__reportType = currentType;
+      generatedLabel.textContent = t('reportGeneratedOn',{date: fmtStamp(data.generatedAt)});
+      const titleEl = document.getElementById(titleId);
+      if(titleEl) titleEl.textContent = t(typeDef(currentType).title);
+      renderTabs();
+      body.classList.toggle('rp-an', currentType!=='management');
+      body.innerHTML = currentType==='management' ? renderManagementReport(data) : renderAnalyticReport(data);
       applyPageStyle();
-      renderCharts(data);
+      if(currentType==='management') renderCharts(data); else analytic.draw(data);
     }
 
     function show(data){
@@ -439,6 +477,15 @@ window.DashboardReportPreview = (function(){
       open = false;
     }
     document.getElementById(closeBtnId).addEventListener('click', hide);
+    const tabsEl = document.getElementById(tabsId);
+    if(tabsEl) tabsEl.addEventListener('click', (e)=>{
+      const btn = e.target.closest('[data-report-type]');
+      if(!btn || !requestData) return;
+      const type = btn.getAttribute('data-report-type');
+      if(type===currentType) return;
+      render(requestData(type));
+      overlay.scrollTo(0,0);
+    });
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) hide(); });
     // createReportPreview() runs again on every background data refresh
     // (initDashboard() re-runs); without removing the previous document-
@@ -460,7 +507,8 @@ window.DashboardReportPreview = (function(){
       // Phase 4: read-only accessor for the export/print pipeline — returns
       // the exact same data object last passed to render() (built by
       // buildManagementReportData). No recomputation happens here.
-      getLastData: ()=>lastData
+      getLastData: ()=>lastData,
+      getType: ()=>currentType
     };
   }
 

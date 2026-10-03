@@ -272,10 +272,11 @@
 <div class="report-overlay hidden" id="reportOverlay">
   <div class="report-modal">
     <div class="report-header">
-      <div class="report-brand"><span class="report-logo-tile"><img src="brand/arrive-logo.png" alt="ARRIVE"></span><span class="report-brand-sub" data-i18n="reportTitle">First Mile Management Report</span></div>
+      <div class="report-brand"><span class="report-logo-tile"><img src="brand/arrive-logo.png" alt="ARRIVE"></span><span class="report-brand-sub" id="reportTitleLabel">First Mile Management Report</span></div>
       <div class="report-generated" id="reportGeneratedLabel"></div>
       <button type="button" class="report-export-btn" id="reportExportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5M9 15l3 3 3-3M12 11v7"/></svg><span data-i18n="reportExportBtn">Export PDF</span></button>
       <button type="button" class="report-close" id="reportCloseBtn" aria-label="Close">✕</button>
+      <div class="report-tabs" id="reportTabs" role="tablist"></div>
     </div>
     <div class="report-body" id="reportBody"></div>
     <div class="report-print-footer">
@@ -313,7 +314,9 @@
 <script src="aggregations.js"></script>
 <script src="filter-ui.js"></script>
 <script src="comparison.js"></script>
+<script src="reportAnalyticData.js"></script>
 <script src="reportData.js"></script>
+<script src="reportAnalytic.js"></script>
 <script src="reportPreview.js"></script>
 <script src="reportPdf.js"></script>
 <script src="dashboard.js"></script>

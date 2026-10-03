@@ -418,7 +418,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       // PHASE 1 report: if the Management Report is open, refresh it with
       // this exact agg — same object the dashboard just rendered from, no
       // independent filtering. If it's closed, this is a no-op.
-      reportPreview.refreshIfOpen(reportBuilder.buildManagementReportData(agg, state, comparisonData));
+      if(reportPreview.isOpen()) reportPreview.refreshIfOpen(buildReportFor(reportPreview.getType(), agg, comparisonData));
     }
 
     // PHASE 1 perf: table-local interactions (search/sort/pagination on
@@ -798,17 +798,23 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
-      meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
+      driverBranch, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
       t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
       insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
     });
+    // يبني بيانات أي نوع تقرير من نفس agg الذي رسمته لوحة المتابعة (بدون فلترة جديدة)
+    function buildReportFor(type, agg, comparisonData){
+      return reportBuilder.buildReportData(type, agg, state, comparisonData);
+    }
     const reportPreview = DashboardReportPreview.createReportPreview({
       overlayId:'reportOverlay', closeBtnId:'reportCloseBtn', bodyId:'reportBody', generatedLabelId:'reportGeneratedLabel',
+      tabsId:'reportTabs', titleId:'reportTitleLabel',
+      requestData: (type)=>{ const agg = cachedAgg || computeAggregates(); return buildReportFor(type, agg, computeComparisonBundle(agg)); },
       t, esc, fmtNum, fmtCurrency, rateClass, charts: __charts
     });
     document.getElementById('reportBtn').addEventListener('click', ()=>{
       const agg = cachedAgg || computeAggregates();
-      reportPreview.show(reportBuilder.buildManagementReportData(agg, state, computeComparisonBundle(agg)));
+      reportPreview.show(buildReportFor(reportPreview.getType(), agg, computeComparisonBundle(agg)));
     });
 
     // Phase 4: export/print pipeline. Reuses reportPreview's own last-

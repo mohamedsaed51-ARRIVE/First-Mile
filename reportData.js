@@ -287,7 +287,28 @@ window.DashboardReport = (function(){
       };
     }
 
-    return { buildManagementReportData };
+    // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع): ملف مستقل
+    // يستعمل نفس دوال النطاق والملخص والغلاف من هذا الملف حتى لا تتكرر.
+    const analytic = DashboardReportAnalyticData.create({
+      lookups, meta, thresholds, driverBranch: deps.driverBranch,
+      t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine,
+      base: { buildScope, buildSummary, buildCoverScopeLine }
+    });
+
+    /**
+     * buildReportData(type, agg, state, comparisonData) — نقطة الدخول الموحدة.
+     * 'management' = تقرير الإدارة الأصلي بلا أي تغيير؛ غير ذلك = تقرير تحليلي.
+     */
+    function buildReportData(type, agg, state, comparisonData){
+      if(!type || type==='management'){
+        const d = buildManagementReportData(agg, state, comparisonData);
+        d.type = 'management';
+        return d;
+      }
+      return analytic.build(type, agg, state);
+    }
+
+    return { buildManagementReportData, buildReportData };
   }
 
   return { createReportBuilder };

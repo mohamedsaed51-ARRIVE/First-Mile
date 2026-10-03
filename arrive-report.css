@@ -191,3 +191,60 @@ body.report-open{overflow:hidden;}
   .rp-lead{margin-bottom:3mm;}
 }
 .report-body td.num{direction:ltr; unicode-bidi:isolate;}
+
+/* ==========================================================================
+   التقارير التحليلية (سائقين / تجار / أسباب فشل / رسوم / فروع)
+   تعتمد على نفس الرموز والمكونات أعلاه — لا ألوان أو خطوط جديدة.
+   ========================================================================== */
+.report-header{flex-wrap:wrap; row-gap:var(--space-2);}
+.report-tabs{flex:1 0 100%; display:flex; gap:var(--space-2); overflow-x:auto; padding-bottom:2px; scrollbar-width:thin;}
+.report-tab{background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.4); color:#fff; border-radius:var(--radius-pill); padding:4px 16px; min-height:30px; font-family:inherit; font-size:var(--fs-small); font-weight:var(--fw-semibold); cursor:pointer; white-space:nowrap; transition:background var(--dur-fast) var(--ease-standard);}
+.report-tab:hover{background:rgba(255,255,255,.28);}
+.report-tab[aria-selected="true"]{background:#fff; color:var(--arrive-blue); border-color:#fff; font-weight:var(--fw-bold);}
+.report-tab:focus-visible{outline:none; box-shadow:var(--shadow-focus);}
+
+.rp-kpis-auto{grid-template-columns:repeat(3,1fr);}
+.report-kpi-value.is-text{font-size:15px; white-space:normal; line-height:1.5; padding-top:2px;}
+.rp-donut-wide{width:100%;}
+.rp-donut-wide .report-donut{max-width:190px;}
+.rp-foot-note{font-size:var(--fs-caption); color:var(--text-secondary); line-height:1.7; margin-top:var(--space-2);}
+.rp-notes-list li{line-height:1.8;}
+
+/* جداول الترتيب: عمود # ضيق ثم الاسم محاذى للبداية */
+.report-body table.rp-rank-table th:first-child,.report-body table.rp-rank-table td:first-child{width:34px; text-align:center; font-family:var(--font-numeric); font-weight:var(--fw-bold); color:var(--text-secondary);}
+.report-body table.rp-rank-table th:nth-child(2),.report-body table.rp-rank-table td:nth-child(2){text-align:start;}
+.report-body table.rp-rank-table tfoot td:first-child{width:auto; text-align:start; color:inherit;}
+.report-body tfoot td{text-align:center;}
+.report-body tfoot td:first-child{text-align:start;}
+.rp-plain-rate{font-family:var(--font-numeric); direction:ltr; unicode-bidi:isolate; color:var(--text-secondary); font-weight:var(--fw-semibold); font-size:var(--fs-caption);}
+tr.rp-row-muted td{color:var(--text-secondary); background:var(--gray-50);}
+.rp-matrix-wrap{overflow-x:auto;}
+.rp-matrix th,.rp-matrix td{padding-inline:8px;}
+.report-body .panel + .panel{margin-top:var(--space-4);}
+.rp-grid-2{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:var(--space-4); margin-bottom:var(--space-4);}
+.rp-grid-2 .panel{margin-bottom:0; margin-top:0 !important;}
+.rp-grid-2 .chart-box{margin-bottom:var(--space-2);}
+
+@media (max-width:760px){
+  .rp-kpis-auto{grid-template-columns:repeat(2,1fr);}
+}
+@media print{
+  .report-tabs{display:none !important;}
+  .rp-an .chart-box svg{max-height:62mm;}
+  .rp-keep{break-inside:avoid; page-break-inside:avoid;}
+  .rp-lead{break-after:avoid; page-break-after:avoid;}
+  .rp-kpis-auto{grid-template-columns:repeat(3,1fr) !important;}
+  .report-kpi-value.is-text{font-size:11pt;}
+  .rp-foot-note{font-size:var(--print-fs-caption);}
+  .rp-matrix{font-size:var(--print-fs-caption);}
+  .rp-matrix th,.rp-matrix td{padding:5px 4px;}
+  .rp-grid-2{display:block !important;}
+  .rp-grid-2.rp-grid-keep{display:grid !important; grid-template-columns:1fr 1fr; gap:4mm;}
+  .rp-grid-keep .panel{margin-bottom:0 !important; padding:3mm;}
+  .rp-grid-keep table{font-size:var(--print-fs-caption);}
+  .rp-grid-keep thead th,.rp-grid-keep tbody td{padding:5px 4px;}
+  .rp-grid-2 .panel{margin-bottom:5mm !important;}
+  .report-body .panel + .panel{margin-top:0;}
+  tfoot{display:table-footer-group;}
+  tfoot td{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+}

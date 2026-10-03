@@ -77,7 +77,7 @@ window.DashboardCharts = (function(){
       container.appendChild(svg);
     }
 
-    function renderDonut(containerId, legendId, labels, values, colors){
+    function renderDonut(containerId, legendId, labels, values, colors, centerLabel){
       const container=document.getElementById(containerId); container.innerHTML='';
       const legend=document.getElementById(legendId); legend.innerHTML='';
       const W=260,H=260, cx=W/2, cy=H/2, rOuter=95, rInner=58;
@@ -93,10 +93,10 @@ window.DashboardCharts = (function(){
         const d=`M ${x1o} ${y1o} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2o} ${y2o} L ${x1i} ${y1i} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x2i} ${y2i} Z`;
         const path=svgEl('path',{d, fill:colors[i%colors.length]}); const tt=svgEl('title',{}); tt.textContent=`${lab}: ${fmtNum(values[i])} (${(frac*100).toFixed(1)}%)`; path.appendChild(tt); svg.appendChild(path);
         angleStart=angleEnd;
-        const legendItem=document.createElement('span'); legendItem.innerHTML=`<i style="background:${colors[i%colors.length]}"></i>${esc(lab)} — ${(frac*100).toFixed(0)}%`; legend.appendChild(legendItem);
+        const legendItem=document.createElement('span'); legendItem.innerHTML=`<i style="background:${colors[i%colors.length]}"></i><bdi>${esc(lab)}</bdi> — <span class="ltr">${(frac*100).toFixed(0)}%</span>`; legend.appendChild(legendItem);
       });
       const centerLbl=svgEl('text',{x:cx,y:cy-4,'text-anchor':'middle',class:'donut-pct',fill:ArriveDS.color('navy'),'font-size':'22'}); centerLbl.textContent=fmtNum(total); svg.appendChild(centerLbl);
-      const centerSub=svgEl('text',{x:cx,y:cy+16,'text-anchor':'middle',class:'axis-label'}); centerSub.textContent=t('requestsHeader'); svg.appendChild(centerSub);
+      const centerSub=svgEl('text',{x:cx,y:cy+16,'text-anchor':'middle',class:'axis-label'}); centerSub.textContent=centerLabel||t('requestsHeader'); svg.appendChild(centerSub);
       container.appendChild(svg);
     }
 
