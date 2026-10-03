@@ -120,9 +120,7 @@ window.DashboardReportAnalyticData = (function(){
       R.kpis = [
         kpi(t('kpiActiveCouriers'), fmtNum(rows.length), 'main'),
         kpi(t('kpiTotalRequests'), fmtNum(agg.total), 'main'),
-        kpi(t('kpiAvgPerCourier'), avg.toFixed(1), 'main'),
         kpi(t('kpiSuccessRate'), p1(totals.rate), 'good'),
-        kpi(t('rtKpiQualified',{n:MIN_D}), fmtNum(qualified.length), 'main'),
         kpi(t('rtKpiBelow75'), fmtNum(bands.bad), bands.bad? 'bad':'good')
       ];
       if(rows.length){
@@ -227,7 +225,6 @@ window.DashboardReportAnalyticData = (function(){
       R.kpis = [
         kpi(t('kpiFailed'), fmtNum(agg.fail), 'bad'),
         kpi(t('rtKpiFailRate'), p1(failRate), 'bad'),
-        kpi(t('rtKpiDistinctReasons'), fmtNum(named.length), 'main'),
         kpi(t('rtKpiTopReason'), named[0] ? named[0].name : t('notInSource'), 'main'),
         kpi(t('rtKpiTop3Share'), p1(top3Share), 'main'),
         kpi(t('rtKpiNoReason'), naRow ? fmtNum(naRow.total) : '0', naRow && naRow.total ? 'bad' : 'good')

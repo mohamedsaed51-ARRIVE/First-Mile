@@ -56,7 +56,7 @@ window.DashboardReportPreview = (function(){
     }
 
     // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع)
-    const analytic = DashboardReportAnalytic.create({ t, esc, fmtNum, fmtCurrency, rateClass, sectionHeader, NA, charts });
+    const analytic = DashboardReportAnalytic.create({ t, esc, fmtNum, rateClass, NA, charts, fmtStamp });
 
     // الغلاف: صفحة كاملة بالأزرق الرسمي والشعار الرسمي مباشرة (بدون تعديل)
     function renderCover(data){
@@ -422,16 +422,7 @@ window.DashboardReportPreview = (function(){
       el.innerHTML = REPORT_TYPES.map(def=>`<button type="button" role="tab" class="report-tab" data-report-type="${def.key}" aria-selected="${def.key===currentType}">${esc(t(def.tab))}</button>`).join('');
     }
     function renderAnalyticReport(data){
-      let n = 0; const next = ()=> ++n;
-      return [
-        renderCover(data),
-        analytic.renderSummary(data, next()),
-        renderScope(data.scope, next()),
-        analytic.renderBody(data, next),
-        renderFindings(data.findings, next()),
-        analytic.renderNotes(data.notes, next()),
-        renderClosing(data, next())
-      ].join('');
+      return analytic.renderBrief(data, typeDef(currentType).title);
     }
     function renderManagementReport(data){
       let n = 0;
