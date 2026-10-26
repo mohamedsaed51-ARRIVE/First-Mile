@@ -308,3 +308,9 @@ tr.rp-row-muted td{color:var(--text-secondary); background:var(--gray-50);}
   .rp-an .rp-brief .chart-box svg{max-height:26mm;}
 }
 @media print{ .rp-screen-only{display:none !important;} }
+
+/* الهدف من التقرير + عنوان المؤشرات الرئيسية */
+.rp-purpose{border:1px solid var(--border-default); border-inline-start:4px solid var(--arrive-blue); border-radius:var(--radius-md); padding:var(--space-3) var(--space-4); margin-bottom:var(--space-4); background:var(--surface-card); break-inside:avoid;}
+.rp-purpose-title{font-size:var(--fs-caption); font-weight:var(--fw-bold); color:var(--arrive-blue); margin-bottom:var(--space-1);}
+.rp-purpose p{margin:0; line-height:1.7;}
+.rp-kpis-title{text-align:start; margin:var(--space-3) 0 var(--space-2);}

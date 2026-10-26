@@ -46,8 +46,11 @@ window.DashboardReportAnalytic = (function(){
       </header>`;
     }
 
+    function purpose(data){
+      return `<div class="rp-purpose"><div class="rp-purpose-title">${esc(t('rpPurposeTitle'))}</div><p>${esc(t('rpPurpose_'+data.type))}</p></div>`;
+    }
     function kpis(data){
-      return `<div class="report-kpis rp-kpis-auto">${data.kpis.map(k=>{
+      return `<div class="rp-mini-title rp-kpis-title">${esc(t('rpKpisTitle'))}</div><div class="report-kpis rp-kpis-auto">${data.kpis.map(k=>{
         const isText = String(k.value).length > 14;
         return `<div class="report-kpi tone-${k.tone}"><div class="report-kpi-label">${esc(k.label)}</div><div class="report-kpi-value${isText?' is-text':''}">${esc(k.value)}</div></div>`;
       }).join('')}</div>`;
@@ -148,6 +151,7 @@ window.DashboardReportAnalytic = (function(){
 
     function renderBrief(data, titleKey){
       return head(data, titleKey) + `<section class="rp-section rp-brief">
+        ${purpose(data)}
         ${kpis(data)}
         ${points(data)}
         ${BODY[data.type](data)}

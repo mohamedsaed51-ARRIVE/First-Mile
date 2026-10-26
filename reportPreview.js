@@ -131,7 +131,9 @@ window.DashboardReportPreview = (function(){
       const deltaHtml = k => k ? `<div class="report-kpi-delta ${k.direction}"><span class="ltr">${arrowFor(k.direction)} ${esc(k.pctLabel)}</span></div>` : '';
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportSecSummary'))}
+        <div class="rp-purpose"><div class="rp-purpose-title">${esc(t('rpPurposeTitle'))}</div><p>${esc(t('rpPurpose_management'))}</p></div>
         ${renderManagementMessage(mgmtLines)}
+        <div class="rp-mini-title rp-kpis-title">${esc(t('rpKpisTitle'))}</div>
         <div class="report-summary-layout">
           <div class="report-kpis">
             ${cards.map(([label,val,k,tone])=>`<div class="report-kpi tone-${tone}"><div class="report-kpi-label">${esc(label)}</div><div class="report-kpi-value">${esc(val)}</div>${deltaHtml(k)}</div>`).join('')}
