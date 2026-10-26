@@ -18,7 +18,7 @@ window.DashboardReportAnalytic = (function(){
 
     const p1 = n => n.toFixed(1)+'%';
     const ltr = v => `<span class="ltr">${esc(String(v))}</span>`;
-    const panel = (title, inner, note) => `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}${note?`<div class="rp-foot-note">${esc(note)}</div>`:''}</div>`;
+    const panel = (title, inner, note, cls) => `<div class="panel${cls?' '+cls:''}"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}${note?`<div class="rp-foot-note">${esc(note)}</div>`:''}</div>`;
     const empty = msg => `<div class="empty-state">${esc(msg || t('emptyFilters'))}</div>`;
     const short = (s, n) => s.length>n ? s.slice(0,n-2)+'…' : s;
 
@@ -125,14 +125,14 @@ window.DashboardReportAnalytic = (function(){
         <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${cur(r.fixed)}</td><td class="num">${cur(r.extra)}</td>
         <td class="num">${r.months||dash}</td><td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
       const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td><td></td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avgPerShip)}</td></tr>`;
-      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'));
+      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'), 'rp-flow');
     }
     function external(data){
       const b = data.body, T = b.totals;
       const body = b.rows.map(r=>`<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.ships)}</td>
         <td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
       const foot = `<tr><td></td><td>${esc(t('rtTotal'))} (${fmtNum(T.customers)})</td><td class="num">${fmtNum(T.reqs)}</td><td class="num">${fmtNum(T.ships)}</td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avg)}</td></tr>`;
-      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'));
+      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'), 'rp-flow');
     }
     function status(data){
       const b = data.body;
