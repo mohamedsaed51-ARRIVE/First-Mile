@@ -147,7 +147,20 @@ window.DashboardReportAnalytic = (function(){
         b.reasonRows.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td></tr>`)) : empty(t('noFailedInRange'));
       return grid(panel(t('rbStStatus'), st), panel(t('rbStType'), ty)) + grid(panel(t('rbStMonth'), mo), panel(t('rbStCity'), ci)) + panel(t('rbStReasons'), re);
     }
-    const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status };
+    function clientQuality(data){
+      const b = data.body;
+      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
+        arr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${p1(r.failRate)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num"><b>${r.perReq.toFixed(1)}</b></td><td class="num">×${r.ratio.toFixed(2)}</td></tr>`)) : empty(t(emptyKey,{n:b.minReqs}));
+      const dist = tbl([t('rtCqColClass'), t('rtColCustomers'), t('requestsHeader'), t('rtColShipments')], [
+        `<tr><td>${esc(t('cqGood'))}</td><td class="num">${fmtNum(b.goodCount)}</td><td class="num">${fmtNum(b.goodReqs)}</td><td class="num">${fmtNum(b.goodShips)}</td></tr>`,
+        `<tr><td>${esc(t('cqMid'))}</td><td class="num">${fmtNum(b.midCount)}</td><td class="num">—</td><td class="num">—</td></tr>`,
+        `<tr><td>${esc(t('cqLow'))}</td><td class="num">${fmtNum(b.lowCount)}</td><td class="num">${fmtNum(b.lowReqs)}</td><td class="num">${fmtNum(b.lowShips)}</td></tr>`,
+        `<tr class="rp-row-muted"><td>${esc(t('cqNa'))}</td><td class="num">${fmtNum(b.naCount)}</td><td class="num">—</td><td class="num">—</td></tr>`]);
+      return panel(t('rbCqDist'), dist)
+        + grid(panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : ''),
+               panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : ''));
+    }
+    const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status, clientQuality };
 
     function renderBrief(data, titleKey){
       return head(data, titleKey) + `<section class="rp-section rp-brief">

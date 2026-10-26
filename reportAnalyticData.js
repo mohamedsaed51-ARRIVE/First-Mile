@@ -29,7 +29,8 @@ window.DashboardReportAnalyticData = (function(){
     { key:'branches',   tab:'rtBranches',   title:'rtBranchesTitle',   analytic:true },
     { key:'driverCost', tab:'rtDrvCost',    title:'rtDrvCostTitle',    analytic:true },
     { key:'external',   tab:'rtExternal',   title:'rtExternalTitle',   analytic:true },
-    { key:'status',     tab:'rtStatus',     title:'rtStatusTitle',     analytic:true }
+    { key:'status',     tab:'rtStatus',     title:'rtStatusTitle',     analytic:true },
+    { key:'clientQuality', tab:'rtCq',      title:'rtCqTitle',         analytic:true }
   ];
 
   function create(deps){
@@ -522,8 +523,50 @@ window.DashboardReportAnalyticData = (function(){
       return R;
     }
 
+    // ======================================================================
+    // 9) جودة العملاء: الشحنات لكل طلب (agg.cq من aggregations.js)
+    // ======================================================================
+    function buildClientQuality(agg, state){
+      const R = skeleton('clientQuality', agg, state);
+      const cq = agg.cq || { avg:0, list:[], thresholds:thresholds.clientQuality };
+      const TH = cq.thresholds || thresholds.clientQuality;
+      const toRow = c => ({ name: clients[c.cl], reqs:c.reqs, done:c.done, failRate: pct(c.reqs-c.done, c.reqs), ships:c.ships, perReq:c.perReq, ratio:c.ratio, cls:c.cls });
+      const all = cq.list.map(toRow);
+      const by = k => all.filter(r=>r.cls===k);
+      const good = by('good').sort((a,b)=>b.ratio-a.ratio || b.ships-a.ships);
+      const low  = by('low').sort((a,b)=>b.reqs-a.reqs || a.ratio-b.ratio);
+      const mid = by('mid'), na = by('na');
+      const lowReqs = low.reduce((s,r)=>s+r.reqs,0), lowShips = low.reduce((s,r)=>s+r.ships,0);
+      const goodReqs = good.reduce((s,r)=>s+r.reqs,0), goodShips = good.reduce((s,r)=>s+r.ships,0);
+
+      R.kpis = [
+        kpi(t('rtKpiActiveMerchants'), fmtNum(all.length), 'main'),
+        kpi(t('rtCqKpiAvg'), cq.avg.toFixed(1), 'main'),
+        kpi(t('rtCqKpiGood'), fmtNum(good.length), 'good'),
+        kpi(t('rtCqKpiLow'), fmtNum(low.length), low.length ? 'bad' : 'good'),
+        kpi(t('rtCqKpiNa',{n:TH.minReqs}), fmtNum(na.length), 'main')
+      ];
+      if(all.length){
+        R.keyPoints.push(t('rtCqPoint1',{avg:ltr(cq.avg.toFixed(1)), ships:ltr(fmtNum(cq.totShip)), reqs:ltr(fmtNum(cq.totReq))}));
+        if(good.length) R.keyPoints.push(t('rtCqPoint2',{n:ltr(fmtNum(good.length)), name:esc(good[0].name), per:ltr(good[0].perReq.toFixed(1))}));
+        if(low.length) R.keyPoints.push(t('rtCqPoint3',{n:ltr(fmtNum(low.length)), reqs:ltr(fmtNum(lowReqs)), pr:ltr(p1(pct(lowReqs, cq.totReq))), ships:ltr(fmtNum(lowShips)), ps:ltr(p1(pct(lowShips, cq.totShip)))}));
+      }
+      if(low.length) R.findings.push({ key:'cqlow', label:t('rtFindCqLow'),
+        detail: low.slice(0,5).map(r=>`${r.name} (${fmtNum(r.reqs)} / ${fmtNum(r.ships)})`).join(', ') });
+      if(good.length) R.findings.push({ key:'cqgood', label:t('rtFindCqGood'),
+        detail: good.slice(0,5).map(r=>`${r.name} (${r.perReq.toFixed(1)})`).join(', ') });
+      R.notes.push(t('rnCqMethod',{min:TH.minReqs, good:TH.good, low:TH.low}));
+      R.notes.push(t('rnCqProposed'));
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
+      if(state.clientQuality && state.clientQuality!=='all') R.notes.push(t('rnCqFilterOn'));
+      R.body = { good: good.slice(0,TOP_N), low: low.slice(0,TOP_N), goodCount:good.length, lowCount:low.length, midCount:mid.length, naCount:na.length,
+        avg:cq.avg, goodReqs, goodShips, lowReqs, lowShips, totReq:cq.totReq, totShip:cq.totShip, minReqs:TH.minReqs };
+      R.managementMessage = R.keyPoints;
+      return R;
+    }
+
     const BUILDERS = { drivers:buildDrivers, merchants:buildMerchants, reasons:buildReasons, fees:buildFees, branches:buildBranches,
-      driverCost:buildDriverCost, external:buildExternal, status:buildStatus };
+      driverCost:buildDriverCost, external:buildExternal, status:buildStatus, clientQuality:buildClientQuality };
     // التقارير الخمسة الأصلية تحصل على كارت «إجمالي الشحنات» هنا؛ التقريران الجديدان يضيفانه بنفسيهما.
     const HAS_OWN_SHIPMENTS_KPI = { driverCost:true, external:true, status:true };
     function build(type, agg, state){

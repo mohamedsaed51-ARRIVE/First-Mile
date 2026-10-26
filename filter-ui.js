@@ -252,6 +252,12 @@ window.DashboardFilterUI = (function(){
       getOptions: ()=>[{key:'all',label:t('feesAll')},{key:'has',label:t('feesHas')},{key:'none',label:t('feesNone')}],
       get: ()=>state.feesMode, set: (k)=>{ state.feesMode=k; }
     });
+    // جودة العميل: متوسط الشحنات لكل طلب مقارنةً بالمتوسط العام (انظر aggregations.js)
+    const qualitySingle = buildSingleSelect(document.getElementById(ids.qualityToggle), {
+      getLabel: ()=>t('cqFilterLabel'),
+      getOptions: ()=>[{key:'all',label:t('cqAll')},{key:'good',label:t('cqGood')},{key:'mid',label:t('cqMid')},{key:'low',label:t('cqLow')}],
+      get: ()=>state.clientQuality, set: (k)=>{ state.clientQuality=k; }
+    });
     // Recorded-on-System can't be filtered (see filters.js header note) —
     // shown as a single compact disabled badge instead of 3 buttons, since
     // it never does anything but explain why. Wrapped in a function (not
@@ -294,6 +300,7 @@ window.DashboardFilterUI = (function(){
         { active: ()=> state.clients.size<clients.length, label: ()=>`${t('merchantChipLabel')}: ${state.clients.size}/${clients.length}`, clear: ()=>{ setAll(state.clients, clients); merchantMulti.refresh(); } },
         { active: ()=> state.reasons.size<reasons.length, label: ()=>`${t('reasonChipLabel')}: ${state.reasons.size}/${reasons.length}`, clear: ()=>{ setAll(state.reasons, reasons); reasonMulti.refresh(); } },
         { active: ()=> state.feesMode!=='all', label: ()=>`${t('feesChipLabel')}: ${state.feesMode==='has'?t('feesHas'):t('feesNone')}`, clear: ()=>{ state.feesMode='all'; feesSingle.refresh(); } },
+        { active: ()=> state.clientQuality!=='all', label: ()=>`${t('cqFilterLabel')}: ${t({good:'cqGood',mid:'cqMid',low:'cqLow'}[state.clientQuality]||'cqAll')}`, clear: ()=>{ state.clientQuality='all'; qualitySingle.refresh(); } },
         { active: ()=> !!state.globalQuery, label: ()=>`${t('globalSearchLabel')}: "${state.globalQuery}"`, clear: ()=>{ state.globalQuery=''; const el=document.getElementById(ids.globalSearch); if(el) el.value=''; } }
       ];
     }
@@ -325,7 +332,7 @@ window.DashboardFilterUI = (function(){
       setAll(state.cities, cities); setAll(state.areas, areas); setAll(state.branches, branches);
       setAll(state.types, types); setAll(state.statuses, statuses);
       setAll(state.drivers, drivers); setAll(state.clients, clients); setAll(state.reasons, reasons);
-      state.feesMode='all';
+      state.feesMode='all'; state.clientQuality='all';
       state.globalQuery=''; state.driverQuery=''; state.clientQuery=''; state.areaQuery='';
       const el=document.getElementById(ids.globalSearch); if(el) el.value='';
       refreshAllControls();
@@ -348,6 +355,7 @@ window.DashboardFilterUI = (function(){
       merchantMulti.refresh();
       reasonMulti.refresh();
       feesSingle.refresh();
+      qualitySingle.refresh();
       renderRecordedBadge();
       renderActiveChips();
     }

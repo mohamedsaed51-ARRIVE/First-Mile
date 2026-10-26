@@ -120,7 +120,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         cities: Array.from(s.cities), areas: Array.from(s.areas), branches: Array.from(s.branches),
         types: Array.from(s.types), statuses: Array.from(s.statuses),
         drivers: Array.from(s.drivers), clients: Array.from(s.clients), reasons: Array.from(s.reasons),
-        feesMode: s.feesMode,
+        feesMode: s.feesMode, clientQuality: s.clientQuality,
         globalQuery: s.globalQuery, driverQuery: s.driverQuery, clientQuery: s.clientQuery, areaQuery: s.areaQuery,
         comparisonMode: s.comparisonMode, comparisonPeriodB: { monthFrom: s.comparisonPeriodB.monthFrom, monthTo: s.comparisonPeriodB.monthTo }
       } : null;
@@ -161,7 +161,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       // operational
       types: new Set(types), statuses: new Set(statuses),
       drivers: new Set(drivers), clients: new Set(clients), reasons: new Set(reasons),
-      feesMode: 'all', recordedMode: 'all', // recordedMode: UI-only, see filters.js header note
+      feesMode: 'all', clientQuality: 'all', recordedMode: 'all', // recordedMode: UI-only, see filters.js header note
       // search
       globalQuery: '', driverQuery: '', clientQuery: '', areaQuery: '',
       // table-local (unrelated to Phase 1; unchanged since Phase 0)
@@ -197,6 +197,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       state.clients = restore(filterSnapshot.clients, clients);
       state.reasons = restore(filterSnapshot.reasons, reasons);
       state.feesMode = filterSnapshot.feesMode || 'all';
+      state.clientQuality = filterSnapshot.clientQuality || 'all';
       state.globalQuery = filterSnapshot.globalQuery || '';
       state.driverQuery = filterSnapshot.driverQuery || '';
       state.clientQuery = filterSnapshot.clientQuery || '';
@@ -249,7 +250,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // PHASE 6A (additive): pickupDays passed through so a future Pickup-Day
     // report/analysis can use it; not consumed by any existing render path.
     const __agg = DashboardAggregations.createAggregations({ state, DONE_IDX, FAIL_IDX, filterEngine, pickupDays });
-    const { filteredRows, aggregate, filteredPickupDays, computePickupDaysByClient } = __agg;
+    const { filteredRows, aggregate, filteredPickupDays, computePickupDaysByClient, applyQuality, getClientQuality, CQ } = __agg;
     // QA/dev hook only — not called from any render path. Lets pickupDays
     // be inspected from the browser console (e.g. window.__pickupDaysMeasure
     // .byClientForCurrentFilters()) without adding any UI.
@@ -322,6 +323,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     function computeAggregates(){
       cachedAgg = buildFullAggregate(filteredRows());
+      cachedAgg.cq = getClientQuality();   // تصنيف جودة العميل قبل تطبيق فلتر الجودة نفسه
       return cachedAgg;
     }
 
@@ -342,7 +344,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         // PHASE 1: reuses the SAME predicate as the current period via
         // filterEngine.filterRowsByMonthRange — no more hand-duplicated
         // filter logic for the "previous period" comparison.
-        const prevRows = filterEngine.filterRowsByMonthRange(state, prevFrom, prevTo);
+        const prevRows = applyQuality(filterEngine.filterRowsByMonthRange(state, prevFrom, prevTo));
         prevAgg = aggregate(prevRows);
       }
 
@@ -691,7 +693,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         periodPresets:'periodPresets', periodMonths:'periodMonthsMulti', fromDate:'periodFromDate', toDate:'periodToDate',
         cityChips:'cityChips', areaMulti:'areaMulti', branchChips:'branchChips',
         typeChips:'typeChips', statusChips:'statusChips', driverMulti:'driverMulti', merchantMulti:'merchantMulti', reasonMulti:'reasonMulti',
-        feesToggle:'feesToggle', recordedToggle:'recordedToggle',
+        feesToggle:'feesToggle', qualityToggle:'qualityToggle', recordedToggle:'recordedToggle',
         globalSearch:'globalSearch', driverSearch:'driverSearch', merchantSearch:'merchantSearch', areaSearch:'areaGlobalSearch',
         activeChips:'activeFiltersRow', resetBtn:'resetBtn', loading:'filterLoadingIndicator'
       }
@@ -732,7 +734,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // costs nothing extra, per the perf requirement).
     function computeComparisonBundle(aggA){
       if(!state.comparisonMode) return null;
-      const frB = filterEngine.filterRowsByMonthRange(state, state.comparisonPeriodB.monthFrom, state.comparisonPeriodB.monthTo);
+      const frB = applyQuality(filterEngine.filterRowsByMonthRange(state, state.comparisonPeriodB.monthFrom, state.comparisonPeriodB.monthTo));
       const aggB = buildFullAggregate(frB);
       return comparisonEngine.buildComparisonData(aggA, aggB, describeCurrentPeriod(), describePeriodB());
     }
@@ -825,7 +827,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
-      driverBranch, salaryRef, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
+      driverBranch, salaryRef, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME, clientQuality: CQ },
       t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
       insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
     });
