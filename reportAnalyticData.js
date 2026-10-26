@@ -28,11 +28,12 @@ window.DashboardReportAnalyticData = (function(){
     { key:'fees',       tab:'rtFees',       title:'rtFeesTitle',       analytic:true },
     { key:'branches',   tab:'rtBranches',   title:'rtBranchesTitle',   analytic:true },
     { key:'driverCost', tab:'rtDrvCost',    title:'rtDrvCostTitle',    analytic:true },
-    { key:'external',   tab:'rtExternal',   title:'rtExternalTitle',   analytic:true }
+    { key:'external',   tab:'rtExternal',   title:'rtExternalTitle',   analytic:true },
+    { key:'status',     tab:'rtStatus',     title:'rtStatusTitle',     analytic:true }
   ];
 
   function create(deps){
-    const { lookups, meta, thresholds, driverBranch, salaryRef, t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
+    const { lookups, meta, thresholds, driverBranch, salaryRef, t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
     const { months, cities, areas, drivers, clients, types, statuses, reasons } = lookups;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
@@ -369,9 +370,9 @@ window.DashboardReportAnalyticData = (function(){
         const extra = sal && sal.extra_salary!=null ? sal.extra_salary : 0;
         const hasSalary = fixed!=null;
         const months = g.months.size;
-        const cost = hasSalary ? (fixed+extra)*months : null;
+        const cost = hasSalary ? (fixed+extra) : null;   // الثابت + العمولة كما في الشيت، بدون ضرب في عدد الأشهر
         return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships, fixed, extra: hasSalary ? extra : null,
-          months, cost, perShip: (hasSalary && g.ships>0) ? cost/g.ships : null, hasSalary };
+          cost, perShip: (hasSalary && g.ships>0) ? cost/g.ships : null, hasSalary };
       }).sort((a,b)=>b.ships-a.ships || b.reqs-a.reqs);
       rows.forEach((r,i)=>{ r.rank = i+1; });
 
@@ -460,10 +461,52 @@ window.DashboardReportAnalyticData = (function(){
       return R;
     }
 
+    // ======================================================================
+    // 8) حالة الطلبات (تم / فشل) حسب الحالة والشهر ونوع الطلب والمدينة
+    // ======================================================================
+    function buildStatus(agg, state){
+      const R = skeleton('status', agg, state);
+      const sm = new Map();
+      agg.fr.forEach(r=>{ const g = sm.get(r[5]) || { si:r[5], total:0, ships:0 }; g.total += r[8]; g.ships += (r[10]||0); sm.set(r[5], g); });
+      const statusRows = Array.from(sm.values()).map(g=>({ name: statusLabel(statuses[g.si]), total:g.total, share:pct(g.total, agg.total), ships:g.ships, isDone:g.si===DONE_IDX, isFail:g.si===FAIL_IDX }))
+        .sort(byTotalDesc);
+      const dim = (keyFn, nameFn) => group(agg.fr, keyFn).map(g=>({ name:nameFn(g.key), key:g.key, total:g.total, done:g.done, fail:g.fail, rate:rateOf(g) }));
+      const monthRows = dim(r=>r[0], k=>monthLabel(months[k])).sort((a,b)=>a.key-b.key);
+      const typeRows = dim(r=>r[4], k=>typeLabel(types[k])).sort(byTotalDesc);
+      const cityRows = dim(r=>r[1], k=>cities[k]).sort(byTotalDesc).slice(0,TOP_N);
+      const reasonRows = Object.keys(agg.reasonAgg).filter(ri=>reasons[ri]!==NA_REASON)
+        .map(ri=>({ name:reasons[ri], total:agg.reasonAgg[ri], share:pct(agg.reasonAgg[ri], agg.fail) })).sort(byTotalDesc).slice(0,5);
+      const rate = pct(agg.done, agg.total);
+      const other = agg.total - agg.done - agg.fail;
+
+      R.kpis = [
+        kpi(t('kpiTotalRequests'), fmtNum(agg.total), 'main'),
+        kpi(t('kpiTotalShipments'), fmtNum(agg.ships||0), 'main'),
+        kpi(t('kpiCompleted'), fmtNum(agg.done), 'good'),
+        kpi(t('kpiFailed'), fmtNum(agg.fail), agg.fail ? 'bad' : 'good'),
+        kpi(t('kpiSuccessRate'), p1(rate), 'good')
+      ];
+      if(agg.total){
+        R.keyPoints.push(t('rtStPoint1',{total:ltr(fmtNum(agg.total)), done:ltr(fmtNum(agg.done)), fail:ltr(fmtNum(agg.fail)), rate:ltr(p1(rate))}));
+        if(typeRows[0]) R.keyPoints.push(t('rtStPoint2',{name:esc(typeRows[0].name), n:ltr(fmtNum(typeRows[0].total)), rate:ltr(p1(typeRows[0].rate))}));
+        if(reasonRows[0]) R.keyPoints.push(t('rtStPoint3',{name:esc(reasonRows[0].name), n:ltr(fmtNum(reasonRows[0].total)), share:ltr(p1(reasonRows[0].share))}));
+        if(other>0) R.keyPoints.push(t('rtStPoint4',{n:ltr(fmtNum(other))}));
+      }
+      if(reasonRows.length) R.findings.push({ key:'streason', label:t('reportAttentionTopReason'),
+        detail: reasonRows.slice(0,3).map(r=>`${r.name} (${fmtNum(r.total)})`).join(', ') });
+      const weakTypes = typeRows.filter(r=>r.total>=MIN_C && rateClass(r.rate)==='rate-bad');
+      if(weakTypes.length) R.findings.push({ key:'sttype', label:t('rtFindStType'),
+        detail: weakTypes.map(r=>`${r.name} (${r.rate.toFixed(1)}%)`).join(', ') });
+      R.notes.push(t('rnStScope'));
+      R.body = { statusRows, monthRows, typeRows, cityRows, reasonRows, totals:{ total:agg.total, done:agg.done, fail:agg.fail, rate, ships:agg.ships||0 } };
+      R.managementMessage = R.keyPoints;
+      return R;
+    }
+
     const BUILDERS = { drivers:buildDrivers, merchants:buildMerchants, reasons:buildReasons, fees:buildFees, branches:buildBranches,
-      driverCost:buildDriverCost, external:buildExternal };
+      driverCost:buildDriverCost, external:buildExternal, status:buildStatus };
     // التقارير الخمسة الأصلية تحصل على كارت «إجمالي الشحنات» هنا؛ التقريران الجديدان يضيفانه بنفسيهما.
-    const HAS_OWN_SHIPMENTS_KPI = { driverCost:true, external:true };
+    const HAS_OWN_SHIPMENTS_KPI = { driverCost:true, external:true, status:true };
     function build(type, agg, state){
       const R = BUILDERS[type](agg, state);
       if(!HAS_OWN_SHIPMENTS_KPI[type]) R.kpis.splice(Math.min(2, R.kpis.length), 0, kpi(t('kpiTotalShipments'), fmtNum(agg.ships||0), 'main'));

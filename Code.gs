@@ -533,7 +533,8 @@ function readPickupRequest() {
     const reasonRaw = col.reason !== undefined ? cleanText(row[col.reason]) : null;
     const reason = reasonRaw === null ? 'N/A' : reasonRaw;
     const fees = col.fees !== undefined ? (Number(row[col.fees]) || 0) : 0;
-    const ships = hasShipments ? (Number(row[col.shipments]) || 0) : 0;
+    // الشحنات تُحسب للطلبات المكتملة (Done) فقط
+    const ships = (hasShipments && status === 'Done') ? (Number(row[col.shipments]) || 0) : 0;
     totalShipments += ships;
 
     if (col.recorded !== undefined) {

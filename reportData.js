@@ -293,7 +293,7 @@ window.DashboardReport = (function(){
     // يستعمل نفس دوال النطاق والملخص والغلاف من هذا الملف حتى لا تتكرر.
     const analytic = DashboardReportAnalyticData.create({
       lookups, meta, thresholds, driverBranch: deps.driverBranch, salaryRef: deps.salaryRef,
-      t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine,
+      t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine,
       base: { buildScope, buildSummary, buildCoverScopeLine }
     });
 
