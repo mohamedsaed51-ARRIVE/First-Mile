@@ -350,13 +350,22 @@ window.DashboardReportAnalyticData = (function(){
     // صف المصدر: [شهر, مدينة, منطقة, سائق, نوع, حالة, تاجر, سبب, عدد, رسوم, شحنات]
     // ======================================================================
     const normName = s => String(s==null ? '' : s).replace(/\s+/g,' ').trim().toLowerCase();
+    // شيت Courier Salary فيه صف لكل مندوب في كل شهر (عمود Month = رقم الشهر)
+    // salaryMap: اسم المندوب -> Map(رقم الشهر أو 0 لو بلا شهر -> {fixed, extra})
     const salaryMap = new Map();
-    (salaryRef||[]).forEach(s=>{ if(s && s.name) salaryMap.set(normName(s.name), s); });
+    (salaryRef||[]).forEach(s=>{
+      if(!s || !s.name || s.fixed_salary==null) return;
+      const k = normName(s.name);
+      if(!salaryMap.has(k)) salaryMap.set(k, new Map());
+      salaryMap.get(k).set(s.month||0, { fixed:s.fixed_salary, extra:s.extra_salary||0 });
+    });
+    const monthNum = mi => parseInt(String(months[mi]).slice(5,7), 10);
     const money = n => fmtCurrency(n);
     const money2 = n => n==null ? null : fmtCurrency(Math.round(n*100)/100);
 
     function buildDriverCost(agg, state){
       const R = skeleton('driverCost', agg, state);
+      const scopeMonths = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
       const m = new Map();
       agg.fr.forEach(r=>{
         let g = m.get(r[3]);
@@ -366,12 +375,19 @@ window.DashboardReportAnalyticData = (function(){
       const rows = Array.from(m.values()).map(g=>{
         const name = drivers[g.di].trim();
         const sal = salaryMap.get(normName(name));
-        const fixed = sal && sal.fixed_salary!=null ? sal.fixed_salary : null;
-        const extra = sal && sal.extra_salary!=null ? sal.extra_salary : 0;
-        const hasSalary = fixed!=null;
-        const months = g.months.size;
-        const cost = hasSalary ? (fixed+extra) : null;   // الثابت + العمولة كما في الشيت، بدون ضرب في عدد الأشهر
-        return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships, fixed, extra: hasSalary ? extra : null,
+        // نجمع مرتب وعمولة كل شهر ضمن الفترة المختارة (مطابقة برقم الشهر)؛ صف بلا شهر يُحسب مرة لكل شهر نشاط
+        let fixed = 0, extra = 0, salMonths = 0, missing = 0;
+        if(sal){
+          scopeMonths.forEach(mi=>{
+            const row = sal.get(monthNum(mi)) || sal.get(0);
+            if(row){ fixed += row.fixed; extra += row.extra; salMonths++; }
+            else if(g.months.has(mi)) missing++;
+          });
+        }
+        const hasSalary = salMonths>0;
+        const cost = hasSalary ? fixed+extra : null;
+        return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships,
+          fixed: hasSalary ? fixed : null, extra: hasSalary ? extra : null, months: salMonths, missing,
           cost, perShip: (hasSalary && g.ships>0) ? cost/g.ships : null, hasSalary };
       }).sort((a,b)=>b.ships-a.ships || b.reqs-a.reqs);
       rows.forEach((r,i)=>{ r.rank = i+1; });
@@ -382,6 +398,7 @@ window.DashboardReportAnalyticData = (function(){
       const shipsCosted = costed.reduce((s,r)=>s+r.ships,0);
       const avgPerShip = shipsCosted>0 ? costTotal/shipsCosted : null;
       const noSalary = rows.filter(r=>!r.hasSalary);
+      const partial = costed.filter(r=>r.missing>0);
       const zeroShips = costed.filter(r=>r.ships===0);
       const ranked = costed.filter(r=>r.perShip!=null).sort((a,b)=>b.perShip-a.perShip);
 
@@ -402,6 +419,8 @@ window.DashboardReportAnalyticData = (function(){
         detail: ranked.slice(0,5).map(r=>`${r.name} (${money2(r.perShip)})`).join(', ') });
       if(noSalary.length) R.findings.push({ key:'dcnosalary', label:t('rtFindDcNoSalary'),
         detail: noSalary.slice(0,8).map(r=>r.name).join(', ') + (noSalary.length>8 ? ` +${noSalary.length-8}` : '') });
+      if(partial.length) R.findings.push({ key:'dcpartial', label:t('rtFindDcPartial'),
+        detail: partial.slice(0,8).map(r=>r.name).join(', ') + (partial.length>8 ? ` +${partial.length-8}` : '') });
       if(zeroShips.length) R.findings.push({ key:'dczero', label:t('rtFindDcZero'),
         detail: zeroShips.slice(0,8).map(r=>r.name).join(', ') + (zeroShips.length>8 ? ` +${zeroShips.length-8}` : '') });
 

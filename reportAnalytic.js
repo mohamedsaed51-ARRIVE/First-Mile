@@ -120,9 +120,9 @@ window.DashboardReportAnalytic = (function(){
       const b = data.body, T = b.totals;
       const body = b.rows.map(r=>`<tr${r.hasSalary?'':' class="rp-row-muted"'}><td>${r.rank}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td>
         <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${cur(r.fixed)}</td><td class="num">${cur(r.extra)}</td>
-        <td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
-      const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avgPerShip)}</td></tr>`;
-      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'));
+        <td class="num">${r.months||dash}</td><td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
+      const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td><td></td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avgPerShip)}</td></tr>`;
+      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'));
     }
     function external(data){
       const b = data.body, T = b.totals;

@@ -343,6 +343,9 @@ function parseDateCell(v) {
     return new Date(epoch.getTime() + v * 86400000);
   }
   if (typeof v === 'string' && v.trim() !== '') {
+    // نص بصيغة يوم/شهر/سنة (مثل 1/6/2026 = 1 يونيو) — لا نترك new Date تفسره شهر/يوم
+    const dmy = v.trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+    if (dmy && Number(dmy[2]) <= 12) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
     const d = new Date(v.trim());
     if (!isNaN(d)) return d;
   }
@@ -665,7 +668,7 @@ function readSalaryReference() {
     const values = sheet.getDataRange().getValues();
     const header = findHeaderRowAndColumns(
       values,
-      { name: ['Name', 'Driver', 'Courier'], vehicle: ['vehicle Type', 'Vehicle Type', 'Vehicle'], salary: ['Fixd Salary', 'Fixed Salary'], extra: ['Extra Salary', 'Extra Commission'] },
+      { name: ['Name', 'Driver', 'Courier'], vehicle: ['vehicle Type', 'Vehicle Type', 'Vehicle'], salary: ['Fixd Salary', 'Fixed Salary'], extra: ['Extra Salary', 'Extra Commission'], month: ['Month'] },
       ['name', 'salary'],
       CONFIG.HEADER_SEARCH_ROWS
     );
@@ -677,8 +680,10 @@ function readSalaryReference() {
       const sal = (salRaw === '' || salRaw === null || salRaw === undefined || isNaN(Number(salRaw))) ? null : Number(salRaw);
       const extRaw = header.col.extra !== undefined ? values[r][header.col.extra] : null;
       const ext = (extRaw === '' || extRaw === null || extRaw === undefined || isNaN(Number(extRaw))) ? null : Number(extRaw);
+      const monRaw = header.col.month !== undefined ? Number(values[r][header.col.month]) : NaN;
       out.push({
         name: nm,
+        month: (isFinite(monRaw) && monRaw >= 1 && monRaw <= 12) ? monRaw : null,   // رقم الشهر في شيت المرتبات (صف لكل مندوب في كل شهر)
         extra_salary: ext,
         vehicle: header.col.vehicle !== undefined ? cleanText(values[r][header.col.vehicle]) : null,
         fixed_salary: sal
