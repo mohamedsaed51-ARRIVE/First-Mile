@@ -308,3 +308,47 @@ tr.rp-row-muted td{color:var(--text-secondary); background:var(--gray-50);}
   .rp-an .rp-brief .chart-box svg{max-height:26mm;}
 }
 @media print{ .rp-screen-only{display:none !important;} }
+
+/* الهدف من التقرير + عنوان المؤشرات الرئيسية */
+.rp-purpose{border:1px solid var(--border-default); border-inline-start:4px solid var(--arrive-blue); border-radius:var(--radius-md); padding:var(--space-3) var(--space-4); margin-bottom:var(--space-4); background:var(--surface-card); break-inside:avoid;}
+.rp-purpose-title{font-size:var(--fs-caption); font-weight:var(--fw-bold); color:var(--arrive-blue); margin-bottom:var(--space-1);}
+.rp-purpose p{margin:0; line-height:1.7;}
+.rp-kpis-title{text-align:start; margin:var(--space-3) 0 var(--space-2);}
+
+/* ---- ضبط الشكل والمسافات الفاضية ---- */
+.report-body table.rp-rank-table td{white-space:nowrap;}
+.report-body table.rp-rank-table td:nth-child(2),.report-body table.rp-rank-table td.rp-c-text{white-space:normal;}
+.rp-flow table{font-size:var(--fs-caption);}
+.rp-flow thead th,.rp-flow tbody td,.rp-flow tfoot td{padding:6px 6px;}
+@media print{
+  /* لا فواصل صفحات إجبارية بين أقسام تقرير الإدارة: الأقسام تتتابع وتملأ الصفحة */
+  .rp-break{break-before:auto !important; page-break-before:auto !important;}
+  .rp-section{margin:0 0 5mm;}
+  /* الجداول الطويلة تنساب عبر الصفحات بدل القفز كاملة للصفحة التالية */
+  .panel.rp-flow{break-inside:auto !important; page-break-inside:auto !important;}
+  .rp-flow table{font-size:7.5pt;}
+  .rp-flow thead th,.rp-flow tbody td,.rp-flow tfoot td{padding:2.5px 3px !important;}
+  /* الهدف + عنوان المؤشرات بحجم مضغوط */
+  .rp-purpose{padding:1.5mm 3mm; margin:0;}
+  .rp-purpose-title{font-size:8pt; margin-bottom:0;}
+  .rp-purpose p{font-size:8.5pt; line-height:1.5;}
+  .rp-kpis-title{margin:0 0 1mm; font-size:8pt;}
+  .rp-an .rp-brief-notes ul{gap:1px;}
+  .rp-an .rp-brief{zoom:.82;}
+  .rp-an .rp-brief-head{zoom:.82;}
+}
+@media print{
+  /* تقرير الإدارة: لوحتان متجاورتان بدل لوحة واحدة في كل صف، ورسوم أقصر */
+  .report-grid-2{display:grid !important; grid-template-columns:1fr 1fr; gap:4mm;}
+  .report-grid-2 > .panel:first-child{grid-column:1/-1;}
+  .report-grid-2 .panel{margin-bottom:0 !important;}
+  .report-body:not(.rp-an) .chart-box svg{max-height:58mm;}
+  .report-donut svg{max-height:38mm;}
+  /* بطاقات الملاحظات: أكثر إحكامًا */
+  .rp-finding{margin-bottom:2.5mm;}
+  .rp-finding-head{padding:2mm 3mm;}
+  .rp-fld-grid{gap:1.5mm; padding-top:2mm;}
+  .rp-fld-value{line-height:1.5;}
+  .rp-closing .rp-signs{margin:8mm 0 4mm;}
+}
+.rp-brief .rp-kpis-title{margin:0 0 calc(-1 * var(--space-2));}

@@ -18,7 +18,7 @@ window.DashboardReportAnalytic = (function(){
 
     const p1 = n => n.toFixed(1)+'%';
     const ltr = v => `<span class="ltr">${esc(String(v))}</span>`;
-    const panel = (title, inner, note) => `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}${note?`<div class="rp-foot-note">${esc(note)}</div>`:''}</div>`;
+    const panel = (title, inner, note, cls) => `<div class="panel${cls?' '+cls:''}"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}${note?`<div class="rp-foot-note">${esc(note)}</div>`:''}</div>`;
     const empty = msg => `<div class="empty-state">${esc(msg || t('emptyFilters'))}</div>`;
     const short = (s, n) => s.length>n ? s.slice(0,n-2)+'…' : s;
 
@@ -46,8 +46,11 @@ window.DashboardReportAnalytic = (function(){
       </header>`;
     }
 
+    function purpose(data){
+      return `<div class="rp-purpose"><div class="rp-purpose-title">${esc(t('rpPurposeTitle'))}</div><p>${esc(t('rpPurpose_'+data.type))}</p></div>`;
+    }
     function kpis(data){
-      return `<div class="report-kpis rp-kpis-auto">${data.kpis.map(k=>{
+      return `<div class="rp-mini-title rp-kpis-title">${esc(t('rpKpisTitle'))}</div><div class="report-kpis rp-kpis-auto">${data.kpis.map(k=>{
         const isText = String(k.value).length > 14;
         return `<div class="report-kpi tone-${k.tone}"><div class="report-kpi-label">${esc(k.label)}</div><div class="report-kpi-value${isText?' is-text':''}">${esc(k.value)}</div></div>`;
       }).join('')}</div>`;
@@ -122,14 +125,14 @@ window.DashboardReportAnalytic = (function(){
         <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${cur(r.fixed)}</td><td class="num">${cur(r.extra)}</td>
         <td class="num">${r.months||dash}</td><td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
       const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td><td></td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avgPerShip)}</td></tr>`;
-      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'));
+      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'), 'rp-flow');
     }
     function external(data){
       const b = data.body, T = b.totals;
       const body = b.rows.map(r=>`<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.ships)}</td>
         <td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
       const foot = `<tr><td></td><td>${esc(t('rtTotal'))} (${fmtNum(T.customers)})</td><td class="num">${fmtNum(T.reqs)}</td><td class="num">${fmtNum(T.ships)}</td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avg)}</td></tr>`;
-      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'));
+      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'), 'rp-flow');
     }
     function status(data){
       const b = data.body;
@@ -144,10 +147,24 @@ window.DashboardReportAnalytic = (function(){
         b.reasonRows.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td></tr>`)) : empty(t('noFailedInRange'));
       return grid(panel(t('rbStStatus'), st), panel(t('rbStType'), ty)) + grid(panel(t('rbStMonth'), mo), panel(t('rbStCity'), ci)) + panel(t('rbStReasons'), re);
     }
-    const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status };
+    function clientQuality(data){
+      const b = data.body;
+      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('doneLegend'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
+        arr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.done)}</td><td class="num">${p1(r.failRate)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num"><b>${r.perReq.toFixed(1)}</b></td><td class="num">×${r.ratio.toFixed(2)}</td></tr>`)) : empty(t(emptyKey,{n:b.minReqs}));
+      const dist = tbl([t('rtCqColClass'), t('rtColCustomers'), t('requestsHeader'), t('rtColShipments')], [
+        `<tr><td>${esc(t('cqGood'))}</td><td class="num">${fmtNum(b.goodCount)}</td><td class="num">${fmtNum(b.goodReqs)}</td><td class="num">${fmtNum(b.goodShips)}</td></tr>`,
+        `<tr><td>${esc(t('cqMid'))}</td><td class="num">${fmtNum(b.midCount)}</td><td class="num">—</td><td class="num">—</td></tr>`,
+        `<tr><td>${esc(t('cqLow'))}</td><td class="num">${fmtNum(b.lowCount)}</td><td class="num">${fmtNum(b.lowReqs)}</td><td class="num">${fmtNum(b.lowShips)}</td></tr>`,
+        `<tr class="rp-row-muted"><td>${esc(t('cqNa'))}</td><td class="num">${fmtNum(b.naCount)}</td><td class="num">—</td><td class="num">—</td></tr>`]);
+      return panel(t('rbCqDist'), dist)
+        + grid(panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : ''),
+               panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : ''));
+    }
+    const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status, clientQuality };
 
     function renderBrief(data, titleKey){
       return head(data, titleKey) + `<section class="rp-section rp-brief">
+        ${purpose(data)}
         ${kpis(data)}
         ${points(data)}
         ${BODY[data.type](data)}
