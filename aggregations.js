@@ -46,24 +46,25 @@ window.DashboardAggregations = (function(){
     const CQ = { minReqs: 10, good: 1.25, low: 0.75 };
     // rowSet: صفوف [..., cl=6, ..., count=8, fees=9, ships=10] — يُحسب المتوسط العام من نفس المجموعة
     function computeClientQuality(rowSet){
-      const per = new Map(); let totReq=0, totShip=0;
+      const per = new Map(); let totReq=0, totShip=0, totDone=0;
       rowSet.forEach(r=>{
         const cl=r[6], cnt=r[8], sh=r[10]||0;
         let g = per.get(cl); if(!g){ g={cl, reqs:0, done:0, ships:0}; per.set(cl,g); }
         g.reqs+=cnt; g.ships+=sh; if(r[5]===DONE_IDX) g.done+=cnt;
-        totReq+=cnt; totShip+=sh;
+        totReq+=cnt; totShip+=sh; if(r[5]===DONE_IDX) totDone+=cnt;
       });
-      const avg = totReq ? totShip/totReq : 0;
+      // المتوسط على الطلبات المكتملة (تم) فقط، لأن الطلب الفاشل لا شحنات له
+      const avg = totDone ? totShip/totDone : 0;
       const classOf = new Map(); const list = [];
       per.forEach(g=>{
-        const perReq = g.reqs ? g.ships/g.reqs : 0;
+        const perReq = g.done ? g.ships/g.done : 0;
         const ratio = avg ? perReq/avg : 0;
         let cls = 'na';
-        if(avg>0 && g.reqs>=CQ.minReqs) cls = ratio>=CQ.good ? 'good' : (ratio<=CQ.low ? 'low' : 'mid');
+        if(avg>0 && g.done>0 && g.reqs>=CQ.minReqs) cls = ratio>=CQ.good ? 'good' : (ratio<=CQ.low ? 'low' : 'mid');
         classOf.set(g.cl, cls);
         list.push({ cl:g.cl, reqs:g.reqs, done:g.done, ships:g.ships, perReq, ratio, cls });
       });
-      return { avg, totReq, totShip, classOf, list, thresholds: CQ };
+      return { avg, totReq, totDone, totShip, classOf, list, thresholds: CQ };
     }
     let lastClientQuality = null;
     // يطبّق فلتر جودة العميل (state.clientQuality) على مجموعة صفوف بعد بقية الفلاتر

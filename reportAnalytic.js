@@ -149,8 +149,8 @@ window.DashboardReportAnalytic = (function(){
     }
     function clientQuality(data){
       const b = data.body;
-      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
-        arr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${p1(r.failRate)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num"><b>${r.perReq.toFixed(1)}</b></td><td class="num">×${r.ratio.toFixed(2)}</td></tr>`)) : empty(t(emptyKey,{n:b.minReqs}));
+      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('doneLegend'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
+        arr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.done)}</td><td class="num">${p1(r.failRate)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num"><b>${r.perReq.toFixed(1)}</b></td><td class="num">×${r.ratio.toFixed(2)}</td></tr>`)) : empty(t(emptyKey,{n:b.minReqs}));
       const dist = tbl([t('rtCqColClass'), t('rtColCustomers'), t('requestsHeader'), t('rtColShipments')], [
         `<tr><td>${esc(t('cqGood'))}</td><td class="num">${fmtNum(b.goodCount)}</td><td class="num">${fmtNum(b.goodReqs)}</td><td class="num">${fmtNum(b.goodShips)}</td></tr>`,
         `<tr><td>${esc(t('cqMid'))}</td><td class="num">${fmtNum(b.midCount)}</td><td class="num">—</td><td class="num">—</td></tr>`,

@@ -547,7 +547,7 @@ window.DashboardReportAnalyticData = (function(){
         kpi(t('rtCqKpiNa',{n:TH.minReqs}), fmtNum(na.length), 'main')
       ];
       if(all.length){
-        R.keyPoints.push(t('rtCqPoint1',{avg:ltr(cq.avg.toFixed(1)), ships:ltr(fmtNum(cq.totShip)), reqs:ltr(fmtNum(cq.totReq))}));
+        R.keyPoints.push(t('rtCqPoint1',{avg:ltr(cq.avg.toFixed(1)), ships:ltr(fmtNum(cq.totShip)), reqs:ltr(fmtNum(cq.totDone))}));
         if(good.length) R.keyPoints.push(t('rtCqPoint2',{n:ltr(fmtNum(good.length)), name:esc(good[0].name), per:ltr(good[0].perReq.toFixed(1))}));
         if(low.length) R.keyPoints.push(t('rtCqPoint3',{n:ltr(fmtNum(low.length)), reqs:ltr(fmtNum(lowReqs)), pr:ltr(p1(pct(lowReqs, cq.totReq))), ships:ltr(fmtNum(lowShips)), ps:ltr(p1(pct(lowShips, cq.totShip)))}));
       }
