@@ -217,6 +217,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       avgfee:'<path d="M12 3v18M17 6.5a5 3 0 00-5-2.5c-3 0-5 1.7-5 3.8 0 5 10 2.5 10 7.2 0 2.1-2 3.8-5 3.8a5 3 0 01-5-2.5"/>',
       drivers:'<circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 20c0-3.6 2.8-6 5.5-6s5.5 2.4 5.5 6M13 20c.2-2.7 1.7-5 4.5-5 2.4 0 4.5 1.7 5 4.2"/>',
       cities:'<path d="M4 21V9l7-5 7 5v12M9 21v-6h4v6M4 21h16"/>', avgpd:'<path d="M4 19V5m4 14V9m4 10V13m4 6V7m4 12V11"/>',
+      ships:'<path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/>',
       compliance:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>'
     };
     function icon(name, color){ return `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
@@ -291,14 +292,18 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     function buildFullAggregate(fr){
       const driverAgg = {}, areaAgg = {}, clientAgg = {}, reasonAgg = {}, cityAgg = {}, typeAgg = {}, branchAgg = {};
       const driverSet = new Set(), citySet = new Set();
-      let total=0, done=0, fail=0, fees=0;
+      const branchShips = {};
+      let total=0, done=0, fail=0, fees=0, ships=0;
       fr.forEach(r=>{
-        const [,ci,ai,di,ti,si,cli,ri,count,f] = r;
-        total+=count; fees+=f; if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count;
+        const [,ci,ai,di,ti,si,cli,ri,count,f,sh0] = r;
+        const sh = sh0||0;   // عدد الشحنات (rows[10]) — صفر لو الـ API قديم
+        total+=count; fees+=f; ships+=sh; if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count;
         driverSet.add(di); citySet.add(ci);
-        if(!driverAgg[di]) driverAgg[di]={count:0,done:0,fees:0};
+        if(!driverAgg[di]) driverAgg[di]={count:0,done:0,fees:0,ships:0};
+        driverAgg[di].ships+=sh;
         driverAgg[di].count+=count; driverAgg[di].fees+=f; if(si===DONE_IDX) driverAgg[di].done+=count;
-        if(!areaAgg[ai]) areaAgg[ai]={count:0,done:0,fees:0,city:cities[ci]};
+        if(!areaAgg[ai]) areaAgg[ai]={count:0,done:0,fees:0,ships:0,city:cities[ci]};
+        areaAgg[ai].ships+=sh;
         areaAgg[ai].count+=count; areaAgg[ai].fees+=f; if(si===DONE_IDX) areaAgg[ai].done+=count;
         if(!clientAgg[cli]) clientAgg[cli]={count:0,done:0};
         clientAgg[cli].count+=count; if(si===DONE_IDX) clientAgg[cli].done+=count;
@@ -309,8 +314,10 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         typeAgg[types[ti]] = (typeAgg[types[ti]]||0)+count;
         const br = driverBranch[di];
         if(br){ branchAgg[br]=(branchAgg[br]||0)+count; }
+        const brKey = br || t('rtBranchUnmapped');
+        branchShips[brKey]=(branchShips[brKey]||0)+sh;
       });
-      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, driverSet, citySet };
+      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, branchShips, total, done, fail, fees, ships, driverSet, citySet };
     }
 
     function computeAggregates(){
@@ -323,7 +330,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       filterUI.renderActiveChips();
 
       const agg = computeAggregates();
-      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, driverSet, citySet } = agg;
+      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, ships, driverSet, citySet } = agg;
 
       document.getElementById('filteredRecordCount').innerHTML =
         `${t('filteredRecordsLabel')}: <b>${fmtNum(total)}</b> ${t('ofTotalLabel',{n:fmtNum(meta.totalRecords)})}`;
@@ -348,6 +355,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
       const kpis = [
         {label:t('kpiTotalRequests'), icon:'total', value:fmtNum(total), foot:trendHtml(total, prevAgg?prevAgg.total:null, true)},
+        {label:t('kpiTotalShipments'), icon:'ships', value:fmtNum(ships), foot: meta.hasShipments===false ? t('shipmentsColMissingShort') : trendHtml(ships, prevAgg?prevAgg.ships:null, true)},
         {label:t('kpiCompleted'), icon:'done', value:fmtNum(done), foot:`${total?(done/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiFailed'), icon:'fail', value:fmtNum(fail), foot:`${total?(fail/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiSuccessRate'), icon:'rate', value:successRate.toFixed(1)+'%', foot:trendHtml(successRate, prevSuccessRate, true)},
@@ -367,6 +375,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         el.innerHTML=`<div class="kpi-top"><div class="kpi-icon">${icon(k.icon,ArriveDS.color('blue'))}</div><div class="kpi-label">${esc(k.label)}</div></div><div class="kpi-value">${k.value}</div>${bar}<div class="kpi-foot">${k.foot}</div>`;
         kpiRow.appendChild(el); });
 
+      renderShipmentsSection(agg);
       renderSummary(total, done, fail, fees, successRate, driverAgg, areaAgg, clientAgg, reasonAgg);
       renderInsights(driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg);
       renderAttention(driverAgg, areaAgg, cityAgg);
@@ -430,6 +439,24 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       renderDriverTable(agg.driverAgg);
       renderAreaTable(agg.areaAgg);
       renderClientTable(agg.clientAgg, agg.total);
+    }
+
+    // ---- الشحنات: أعلى 10 مناطق (جدول) + أعلى الفروع والمناديب (رسم بياني) ----
+    // كلها بعدد الشحنات (rows[10]) وليس عدد الطلبات، على نفس agg المفلتر.
+    function shortLabel(s, n){ return s.length>n ? s.slice(0,n-2)+'…' : s; }
+    function renderShipmentsSection(agg){
+      const note = document.getElementById('shipmentsMissingNote');
+      if(note){ note.classList.toggle('hidden', meta.hasShipments!==false); note.textContent = t('shipmentsColMissing'); }
+      const areaRows = Object.keys(agg.areaAgg).map(ai=>({name:areas[ai], city:agg.areaAgg[ai].city, ships:agg.areaAgg[ai].ships, reqs:agg.areaAgg[ai].count}))
+        .filter(a=>a.ships>0).sort((a,b)=>b.ships-a.ships).slice(0,10);
+      const tb = document.getElementById('shipAreaTableBody');
+      tb.innerHTML = areaRows.length===0 ? `<tr><td colspan="6"><div class="empty-state">${esc(t('emptyFilters'))}</div></td></tr>` :
+        areaRows.map((a,i)=>`<tr><td class="rank ${i<3?'top3':''}">${i+1}</td><td class="name-cell">${esc(a.name)}</td><td>${esc(a.city)}</td>
+          <td class="num">${fmtNum(a.ships)}</td><td class="num">${agg.ships?(a.ships/agg.ships*100).toFixed(1):'0.0'}%</td><td class="num">${fmtNum(a.reqs)}</td></tr>`).join('');
+      const branchList = Object.keys(agg.branchShips).map(b=>({name:b, ships:agg.branchShips[b]})).filter(b=>b.ships>0).sort((a,b)=>b.ships-a.ships).slice(0,10);
+      renderHBar('shipBranchChart', branchList.map(b=>shortLabel(b.name,26)), branchList.map(b=>b.ships), ArriveDS.color('blue'));
+      const drvList = Object.keys(agg.driverAgg).map(di=>({name:drivers[di].trim(), ships:agg.driverAgg[di].ships})).filter(d=>d.ships>0).sort((a,b)=>b.ships-a.ships).slice(0,10);
+      renderHBar('shipDriverChart', drvList.map(d=>shortLabel(d.name,26)), drvList.map(d=>d.ships), ArriveDS.color('teal'));
     }
 
     function renderSummary(total, done, fail, fees, successRate, driverAgg, areaAgg, clientAgg, reasonAgg){
@@ -798,7 +825,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
-      driverBranch, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
+      driverBranch, salaryRef, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME },
       t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
       insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
     });

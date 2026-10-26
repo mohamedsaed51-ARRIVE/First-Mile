@@ -169,6 +169,30 @@
     </div>
   </div>
 
+  <div class="panel" id="shipmentsPanel">
+    <div class="panel-head"><div class="panel-title" data-i18n="shipAreasTitle">Top 10 Areas by Shipments</div><div class="panel-note" data-i18n="shipAreasNote">By number of shipments picked up, not number of requests</div></div>
+    <div class="dq-warn hidden" id="shipmentsMissingNote"></div>
+    <div class="table-scroll">
+      <table><thead><tr>
+        <th style="width:34px;">#</th>
+        <th data-i18n="areaFilterLabel">Area</th>
+        <th data-i18n="cityLabel">City</th>
+        <th style="text-align:end;" data-i18n="kpiTotalShipments">Shipments</th>
+        <th style="text-align:end;" data-i18n="rtColShare">Share</th>
+        <th style="text-align:end;" data-i18n="requestsHeader">Requests</th>
+      </tr></thead><tbody id="shipAreaTableBody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel"><div class="panel-head"><div class="panel-title" data-i18n="shipBranchesTitle">Top Branches by Shipments</div><div class="panel-note" data-i18n="shipTop10Note">Top 10 in current filter, by shipments</div></div>
+      <div class="chart-box" id="shipBranchChart"></div>
+    </div>
+    <div class="panel"><div class="panel-head"><div class="panel-title" data-i18n="shipDriversTitle">Top Couriers by Shipments</div><div class="panel-note" data-i18n="shipTop10Note">Top 10 in current filter, by shipments</div></div>
+      <div class="chart-box" id="shipDriverChart"></div>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="panel-head"><div class="panel-title"><span data-i18n="failureReasonsTitle">Failure Reasons</span> <span class="badge" data-i18n="newBadge">NEW</span></div><div class="panel-note" id="reasonPanelNote">—</div></div>
     <div class="chart-box" id="reasonChart"></div>

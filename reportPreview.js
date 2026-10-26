@@ -56,7 +56,7 @@ window.DashboardReportPreview = (function(){
     }
 
     // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع)
-    const analytic = DashboardReportAnalytic.create({ t, esc, fmtNum, rateClass, NA, charts, fmtStamp });
+    const analytic = DashboardReportAnalytic.create({ t, esc, fmtNum, fmtCurrency, rateClass, NA, charts, fmtStamp });
 
     // الغلاف: صفحة كاملة بالأزرق الرسمي والشعار الرسمي مباشرة (بدون تعديل)
     function renderCover(data){
@@ -122,6 +122,7 @@ window.DashboardReportPreview = (function(){
       const findKpi = key => comparison ? comparison.kpis.find(k=>k.key===key) : null;
       const cards = [
         [t('kpiTotalRequests'), summary.totalRequestsLabel, findKpi(SUMMARY_KPI_KEYS.totalRequests), 'main'],
+        [t('kpiTotalShipments'), summary.totalShipmentsLabel, null, 'main'],
         [t('kpiCompleted'), summary.successfulRequestsLabel, findKpi(SUMMARY_KPI_KEYS.successfulRequests), 'good'],
         [t('kpiFailed'), summary.failedRequestsLabel, findKpi(SUMMARY_KPI_KEYS.failedRequests), 'bad'],
         [t('kpiSuccessRate'), summary.successRateLabel, findKpi(SUMMARY_KPI_KEYS.successRate), 'good'],
