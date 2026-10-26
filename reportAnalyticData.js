@@ -26,11 +26,13 @@ window.DashboardReportAnalyticData = (function(){
     { key:'merchants',  tab:'rtMerchants',  title:'rtMerchantsTitle',  analytic:true },
     { key:'reasons',    tab:'rtReasons',    title:'rtReasonsTitle',    analytic:true },
     { key:'fees',       tab:'rtFees',       title:'rtFeesTitle',       analytic:true },
-    { key:'branches',   tab:'rtBranches',   title:'rtBranchesTitle',   analytic:true }
+    { key:'branches',   tab:'rtBranches',   title:'rtBranchesTitle',   analytic:true },
+    { key:'driverCost', tab:'rtDrvCost',    title:'rtDrvCostTitle',    analytic:true },
+    { key:'external',   tab:'rtExternal',   title:'rtExternalTitle',   analytic:true }
   ];
 
   function create(deps){
-    const { lookups, meta, thresholds, driverBranch, t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
+    const { lookups, meta, thresholds, driverBranch, salaryRef, t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
     const { months, cities, areas, drivers, clients, types, statuses, reasons } = lookups;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
@@ -342,8 +344,131 @@ window.DashboardReportAnalyticData = (function(){
       return R;
     }
 
-    const BUILDERS = { drivers:buildDrivers, merchants:buildMerchants, reasons:buildReasons, fees:buildFees, branches:buildBranches };
-    function build(type, agg, state){ return BUILDERS[type](agg, state); }
+    // ======================================================================
+    // 6) أداء المناديب وتكلفة الشحنة (مرتب ثابت + عمولة إضافية من Courier Salary)
+    // صف المصدر: [شهر, مدينة, منطقة, سائق, نوع, حالة, تاجر, سبب, عدد, رسوم, شحنات]
+    // ======================================================================
+    const normName = s => String(s==null ? '' : s).replace(/\s+/g,' ').trim().toLowerCase();
+    const salaryMap = new Map();
+    (salaryRef||[]).forEach(s=>{ if(s && s.name) salaryMap.set(normName(s.name), s); });
+    const money = n => fmtCurrency(n);
+    const money2 = n => n==null ? null : fmtCurrency(Math.round(n*100)/100);
+
+    function buildDriverCost(agg, state){
+      const R = skeleton('driverCost', agg, state);
+      const m = new Map();
+      agg.fr.forEach(r=>{
+        let g = m.get(r[3]);
+        if(!g){ g = { di:r[3], clients:new Set(), months:new Set(), reqs:0, ships:0 }; m.set(r[3], g); }
+        g.clients.add(r[6]); g.months.add(r[0]); g.reqs += r[8]; g.ships += (r[10]||0);
+      });
+      const rows = Array.from(m.values()).map(g=>{
+        const name = drivers[g.di].trim();
+        const sal = salaryMap.get(normName(name));
+        const fixed = sal && sal.fixed_salary!=null ? sal.fixed_salary : null;
+        const extra = sal && sal.extra_salary!=null ? sal.extra_salary : 0;
+        const hasSalary = fixed!=null;
+        const months = g.months.size;
+        const cost = hasSalary ? (fixed+extra)*months : null;
+        return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships, fixed, extra: hasSalary ? extra : null,
+          months, cost, perShip: (hasSalary && g.ships>0) ? cost/g.ships : null, hasSalary };
+      }).sort((a,b)=>b.ships-a.ships || b.reqs-a.reqs);
+      rows.forEach((r,i)=>{ r.rank = i+1; });
+
+      const allClients = new Set(); agg.fr.forEach(r=>allClients.add(r[6]));
+      const costed = rows.filter(r=>r.hasSalary);
+      const costTotal = costed.reduce((s,r)=>s+r.cost,0);
+      const shipsCosted = costed.reduce((s,r)=>s+r.ships,0);
+      const avgPerShip = shipsCosted>0 ? costTotal/shipsCosted : null;
+      const noSalary = rows.filter(r=>!r.hasSalary);
+      const zeroShips = costed.filter(r=>r.ships===0);
+      const ranked = costed.filter(r=>r.perShip!=null).sort((a,b)=>b.perShip-a.perShip);
+
+      R.kpis = [
+        kpi(t('kpiActiveCouriers'), fmtNum(rows.length), 'main'),
+        kpi(t('kpiTotalShipments'), fmtNum(agg.ships), 'main'),
+        kpi(t('rtKpiCustomers'), fmtNum(allClients.size), 'main'),
+        kpi(t('rtKpiAvgCostShip'), avgPerShip==null ? '—' : money2(avgPerShip), 'main'),
+        kpi(t('rtKpiNoSalary'), fmtNum(noSalary.length), noSalary.length ? 'bad' : 'good')
+      ];
+      if(rows.length){
+        R.keyPoints.push(t('rtDcPoint1',{n:ltr(fmtNum(rows.length)), ships:ltr(fmtNum(agg.ships)), cust:ltr(fmtNum(allClients.size))}));
+        if(avgPerShip!=null) R.keyPoints.push(t('rtDcPoint2',{avg:ltr(money2(avgPerShip))}));
+        if(ranked[0]) R.keyPoints.push(t('rtDcPoint3',{name:esc(ranked[0].name), cost:ltr(money2(ranked[0].perShip))}));
+        if(noSalary.length) R.keyPoints.push(t('rtDcPoint4',{n:ltr(fmtNum(noSalary.length))}));
+      }
+      if(ranked.length) R.findings.push({ key:'dchigh', label:t('rtFindDcHigh'),
+        detail: ranked.slice(0,5).map(r=>`${r.name} (${money2(r.perShip)})`).join(', ') });
+      if(noSalary.length) R.findings.push({ key:'dcnosalary', label:t('rtFindDcNoSalary'),
+        detail: noSalary.slice(0,8).map(r=>r.name).join(', ') + (noSalary.length>8 ? ` +${noSalary.length-8}` : '') });
+      if(zeroShips.length) R.findings.push({ key:'dczero', label:t('rtFindDcZero'),
+        detail: zeroShips.slice(0,8).map(r=>r.name).join(', ') + (zeroShips.length>8 ? ` +${zeroShips.length-8}` : '') });
+
+      R.notes.push(t('rnDcMethod'));
+      R.notes.push(t('rnDcNoShip'));
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
+      R.body = { rows, totals:{ couriers:rows.length, customers:allClients.size, reqs:agg.total, ships:agg.ships, cost:costTotal, avgPerShip } };
+      R.managementMessage = R.keyPoints;
+      return R;
+    }
+
+    // ======================================================================
+    // 7) البيك أب بتكلفة خارجية (Extra Fees > 0) — لكل عميل
+    // ======================================================================
+    function buildExternal(agg, state){
+      const R = skeleton('external', agg, state);
+      const ext = agg.fr.filter(r=>r[9]>0);
+      const m = new Map();
+      ext.forEach(r=>{
+        let g = m.get(r[6]);
+        if(!g){ g = { ci:r[6], reqs:0, ships:0, cost:0 }; m.set(r[6], g); }
+        g.reqs += r[8]; g.ships += (r[10]||0); g.cost += r[9];
+      });
+      const rows = Array.from(m.values()).map(g=>({
+        name: clients[g.ci], reqs:g.reqs, ships:g.ships, cost:g.cost, perShip: g.ships>0 ? g.cost/g.ships : null
+      })).sort((a,b)=>b.cost-a.cost);
+      rows.forEach((r,i)=>{ r.rank = i+1; });
+      const reqs = rows.reduce((s,r)=>s+r.reqs,0);
+      const ships = rows.reduce((s,r)=>s+r.ships,0);
+      const cost = rows.reduce((s,r)=>s+r.cost,0);
+      const avg = ships>0 ? cost/ships : null;
+      const shareShips = pct(ships, agg.ships);
+      const perShipRanked = rows.filter(r=>r.perShip!=null).sort((a,b)=>b.perShip-a.perShip);
+
+      R.kpis = [
+        kpi(t('rtKpiExtReq'), fmtNum(reqs), 'main'),
+        kpi(t('rtKpiExtShips'), fmtNum(ships), 'main'),
+        kpi(t('rtKpiCustomers'), fmtNum(rows.length), 'main'),
+        kpi(t('rtKpiExtCost'), money(cost), 'main'),
+        kpi(t('rtKpiAvgCostShip'), avg==null ? '—' : money2(avg), 'main'),
+        kpi(t('rtKpiExtShare'), p1(shareShips), 'main')
+      ];
+      if(rows.length){
+        R.keyPoints.push(t('rtExPoint1',{req:ltr(fmtNum(reqs)), ships:ltr(fmtNum(ships)), cust:ltr(fmtNum(rows.length))}));
+        if(avg!=null) R.keyPoints.push(t('rtExPoint2',{cost:ltr(money(cost)), avg:ltr(money2(avg))}));
+        R.keyPoints.push(t('rtExPoint3',{name:esc(rows[0].name), cost:ltr(money(rows[0].cost))}));
+        R.findings.push({ key:'extop', label:t('rtFindExTop'),
+          detail: rows.slice(0,5).map(r=>`${r.name} (${money(r.cost)})`).join(', ') });
+        if(perShipRanked.length) R.findings.push({ key:'excostly', label:t('rtFindExCostly'),
+          detail: perShipRanked.slice(0,5).map(r=>`${r.name} (${money2(r.perShip)})`).join(', ') });
+      }
+      R.notes.push(t('rnExMethod'));
+      R.notes.push(t('rnDcNoShip'));
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
+      R.body = { rows, totals:{ reqs, ships, customers:rows.length, cost, avg, shareShips } };
+      R.managementMessage = R.keyPoints;
+      return R;
+    }
+
+    const BUILDERS = { drivers:buildDrivers, merchants:buildMerchants, reasons:buildReasons, fees:buildFees, branches:buildBranches,
+      driverCost:buildDriverCost, external:buildExternal };
+    // التقارير الخمسة الأصلية تحصل على كارت «إجمالي الشحنات» هنا؛ التقريران الجديدان يضيفانه بنفسيهما.
+    const HAS_OWN_SHIPMENTS_KPI = { driverCost:true, external:true };
+    function build(type, agg, state){
+      const R = BUILDERS[type](agg, state);
+      if(!HAS_OWN_SHIPMENTS_KPI[type]) R.kpis.splice(Math.min(2, R.kpis.length), 0, kpi(t('kpiTotalShipments'), fmtNum(agg.ships||0), 'main'));
+      return R;
+    }
 
     return { build };
   }

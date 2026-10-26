@@ -12,7 +12,7 @@
 window.DashboardReportAnalytic = (function(){
 
   function create(h){
-    const { t, esc, fmtNum, rateClass, NA, charts, fmtStamp } = h;
+    const { t, esc, fmtNum, fmtCurrency, rateClass, NA, charts, fmtStamp } = h;
     const DS = window.ArriveDS;
     const LIST_N = 5;
 
@@ -113,7 +113,25 @@ window.DashboardReportAnalytic = (function(){
       return panel(t('rbBranches'), tbl([t('branchFilterLabel'), t('requestsHeader'), t('rtColShare'), t('successHeader'), t('extraFeesHeader')],
         all.map((r,i)=>row(r, b.unmapped && i===all.length-1)), foot), t('rtBrTableNote',{n:b.minVolume}));
     }
-    const BODY = { drivers, merchants, reasons, fees, branches };
+    const dash = '—';
+    const cur = n => n==null ? dash : fmtCurrency(n);
+    const cur2 = n => n==null ? dash : fmtCurrency(Math.round(n*100)/100);
+    function driverCost(data){
+      const b = data.body, T = b.totals;
+      const body = b.rows.map(r=>`<tr${r.hasSalary?'':' class="rp-row-muted"'}><td>${r.rank}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td>
+        <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${cur(r.fixed)}</td><td class="num">${cur(r.extra)}</td>
+        <td class="num">${r.months}</td><td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
+      const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td><td></td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avgPerShip)}</td></tr>`;
+      return panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColFixed'), t('rtColExtraSal'), t('rtColActiveMonths'), t('rtColTotalCost'), t('rtColCostPerShip')], body, foot), t('rnDcMethod'));
+    }
+    function external(data){
+      const b = data.body, T = b.totals;
+      const body = b.rows.map(r=>`<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.ships)}</td>
+        <td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
+      const foot = `<tr><td></td><td>${esc(t('rtTotal'))} (${fmtNum(T.customers)})</td><td class="num">${fmtNum(T.reqs)}</td><td class="num">${fmtNum(T.ships)}</td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avg)}</td></tr>`;
+      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'));
+    }
+    const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external };
 
     function renderBrief(data, titleKey){
       return head(data, titleKey) + `<section class="rp-section rp-brief">

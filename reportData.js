@@ -89,6 +89,8 @@ window.DashboardReport = (function(){
         failedRequests: agg.fail,
         successRate,
         totalExtraFees: agg.fees,
+        totalShipments: agg.ships || 0,
+        totalShipmentsLabel: fmtNum(agg.ships || 0),
         totalRequestsLabel: fmtNum(agg.total),
         successfulRequestsLabel: fmtNum(agg.done),
         failedRequestsLabel: fmtNum(agg.fail),
@@ -290,7 +292,7 @@ window.DashboardReport = (function(){
     // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع): ملف مستقل
     // يستعمل نفس دوال النطاق والملخص والغلاف من هذا الملف حتى لا تتكرر.
     const analytic = DashboardReportAnalyticData.create({
-      lookups, meta, thresholds, driverBranch: deps.driverBranch,
+      lookups, meta, thresholds, driverBranch: deps.driverBranch, salaryRef: deps.salaryRef,
       t, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine,
       base: { buildScope, buildSummary, buildCoverScopeLine }
     });

@@ -64,6 +64,12 @@
  *   verified from a browser tab, without opening the Apps Script editor.
  *
  * -----------------------------------------------------------------------
+ * SHIPMENTS + EXTERNAL-COST UPDATE
+ * - rows[i][10] = عدد الشحنات (عمود "Pickup")؛ pickupDays[i][11] = نفس القيمة.
+ * - مفتاح التجميع صار يفصل Extra Fees>0 عن غيرها (علم E/I).
+ * - salaryRef[i].extra_salary من عمود "Extra Salary" في شيت Courier Salary.
+ * - مفتاح الكاش v3.
+ *
  * PHASE 6A — pickupDays dataset (added, additive only)
  * -----------------------------------------------------------------------
  * - A new, independent dataset `pickupDays` is now built alongside `rows`
@@ -140,6 +146,9 @@ const CONFIG = {
     status:    ['Request Status', 'Status'],
     pickupNo:  ['Pickup #', 'Pickup No', 'Pickup Number', 'PickupNo'],
     fees:      ['Extra Fees', 'Extra Fee', 'ExtraFees'],
+    // عدد الشحنات في كل طلب بيك أب (عمود "Pickup" في شيت Pickup Request).
+    // اختياري: لو غير موجود يُحسب عدد الشحنات صفرًا ويظهر تنبيه في الداشبورد.
+    shipments: ['Pickup', 'Shipments', 'Shipment', 'No of Shipments', 'Number of Shipments', 'عدد الشحنات'],
     reason:    ['Reason', 'Failure Reason'],
     recorded:  ['Recorded on system', 'Recorded On System', 'Recorded']
   },
@@ -168,7 +177,7 @@ function doGet(e) {
 
     const bypassCache = params.refresh === '1';
     const cache = CacheService.getScriptCache();
-    const cacheKey = 'first_mile_dashboard_payload_v2';
+    const cacheKey = 'first_mile_dashboard_payload_v3';
 
     if (!bypassCache) {
       const cached = safeCacheGet(cache, cacheKey);
@@ -439,6 +448,8 @@ function buildPayload() {
     uniqueAreas: pickupResult.areas.length,
     uniqueCities: pickupResult.cities.length,
     uniqueTypes: pickupResult.types.length,
+    hasShipments: pickupResult.hasShipments,
+    totalShipments: pickupResult.totalShipments,
     recordedYes: pickupResult.recordedYes,
     recordedNo: pickupResult.recordedNo,
     recordedBlank: pickupResult.totalRecords - recordedTotal,
@@ -484,6 +495,8 @@ function readPickupRequest() {
   const skippedRowReasons = {}; // reason label -> count, for diagnostics
   let dateMin = null, dateMax = null;
   let recordedYes = 0, recordedNo = 0;
+  let totalShipments = 0;
+  const hasShipments = col.shipments !== undefined;
 
   function bumpSkip(reasonLabel) {
     skippedRows++;
@@ -520,6 +533,8 @@ function readPickupRequest() {
     const reasonRaw = col.reason !== undefined ? cleanText(row[col.reason]) : null;
     const reason = reasonRaw === null ? 'N/A' : reasonRaw;
     const fees = col.fees !== undefined ? (Number(row[col.fees]) || 0) : 0;
+    const ships = hasShipments ? (Number(row[col.shipments]) || 0) : 0;
+    totalShipments += ships;
 
     if (col.recorded !== undefined) {
       const recorded = normalizeEnum(row[col.recorded], CONFIG.RECORDED_ALIASES);
@@ -529,10 +544,13 @@ function readPickupRequest() {
     monthsSet[mKey] = true; citiesSet[city] = true; areasSet[area] = true; driversSet[driver] = true;
     clientsSet[client] = true; typesSet[type] = true; statusesSet[status] = true; reasonsSet[reason] = true;
 
-    const key = [mKey, city, area, driver, type, status, client, reason].join('|');
-    if (!groups[key]) groups[key] = { m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason, count: 0, fees: 0 };
+    // العلم الأخير (E/I) يفصل الطلبات ذات التكلفة الخارجية (Extra Fees > 0) عن غيرها
+    // داخل نفس المجموعة، حتى يمكن حساب شحنات البيك أب الخارجي بدقة.
+    const key = [mKey, city, area, driver, type, status, client, reason, fees > 0 ? 'E' : 'I'].join('|');
+    if (!groups[key]) groups[key] = { m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason, count: 0, fees: 0, ships: 0 };
     groups[key].count += 1;
     groups[key].fees += fees;
+    groups[key].ships += ships;
 
     const dStr = fmtDate(dateObj);
     if (dStr) { if (!dateMin || dStr < dateMin) dateMin = dStr; if (!dateMax || dStr > dateMax) dateMax = dStr; }
@@ -545,7 +563,7 @@ function readPickupRequest() {
     if (normalizeText(type) === 'pickup' && dStr) {
       pickupDaysRaw.push({
         m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason,
-        count: 1, fees: fees, date: dStr
+        count: 1, fees: fees, date: dStr, ships: ships
       });
     }
   }
@@ -568,26 +586,27 @@ function readPickupRequest() {
     const g = groups[k];
     return [
       mIdx[g.m], cIdx[g.c], aIdx[g.a], dIdx[g.d], tIdx[g.t], sIdx[g.s], clIdx[g.cl], rIdx[g.r],
-      g.count, Math.round(g.fees * 100) / 100
+      g.count, Math.round(g.fees * 100) / 100, g.ships
     ];
   });
 
   // ---- Phase 6A: pickupDays, encoded with the SAME dictionaries/indices as `rows` ----
   // Shape per entry: [monthIdx, cityIdx, areaIdx, driverIdx, typeIdx, statusIdx,
-  //                    clientIdx, reasonIdx, count(=1), fees, date("YYYY-MM-DD")]
+  //                    clientIdx, reasonIdx, count(=1), fees, date("YYYY-MM-DD"), shipments]
   // Every value used here (p.m, p.c, p.a, p.d, p.t, p.s, p.cl, p.r) was captured
   // from a row that already passed the exact same validation as `rows` above, so
   // every index lookup below is guaranteed to exist — no undefined/null indices.
   const pickupDays = pickupDaysRaw.map(function (p) {
     return [
       mIdx[p.m], cIdx[p.c], aIdx[p.a], dIdx[p.d], tIdx[p.t], sIdx[p.s], clIdx[p.cl], rIdx[p.r],
-      1, Math.round(p.fees * 100) / 100, p.date
+      1, Math.round(p.fees * 100) / 100, p.date, p.ships
     ];
   });
 
   return {
     months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays,
     totalRecords, processedRows, skippedRows, skippedRowReasons,
+    hasShipments, totalShipments,
     dateMin, dateMax, recordedYes, recordedNo,
     headerRowIndex: header.rowIndex
   };
@@ -645,7 +664,7 @@ function readSalaryReference() {
     const values = sheet.getDataRange().getValues();
     const header = findHeaderRowAndColumns(
       values,
-      { name: ['Name', 'Driver', 'Courier'], vehicle: ['vehicle Type', 'Vehicle Type', 'Vehicle'], salary: ['Fixd Salary', 'Fixed Salary'] },
+      { name: ['Name', 'Driver', 'Courier'], vehicle: ['vehicle Type', 'Vehicle Type', 'Vehicle'], salary: ['Fixd Salary', 'Fixed Salary'], extra: ['Extra Salary', 'Extra Commission'] },
       ['name', 'salary'],
       CONFIG.HEADER_SEARCH_ROWS
     );
@@ -655,8 +674,11 @@ function readSalaryReference() {
       if (!nm) continue;
       const salRaw = values[r][header.col.salary];
       const sal = (salRaw === '' || salRaw === null || salRaw === undefined || isNaN(Number(salRaw))) ? null : Number(salRaw);
+      const extRaw = header.col.extra !== undefined ? values[r][header.col.extra] : null;
+      const ext = (extRaw === '' || extRaw === null || extRaw === undefined || isNaN(Number(extRaw))) ? null : Number(extRaw);
       out.push({
         name: nm,
+        extra_salary: ext,
         vehicle: header.col.vehicle !== undefined ? cleanText(values[r][header.col.vehicle]) : null,
         fixed_salary: sal
       });

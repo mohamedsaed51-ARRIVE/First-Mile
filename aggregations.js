@@ -43,13 +43,13 @@ window.DashboardAggregations = (function(){
       return filterEngine.filterRows(state);
     }
 
-    // Reduces a row set to {total, done, fail, fees}. Independent of how
+    // Reduces a row set to {total, done, fail, fees, ships}. Independent of how
     // the row set was produced, so it's reused for the current period,
     // the previous period, and anywhere else a quick summary is needed.
     function aggregate(rowSet){
-      let total=0,done=0,fail=0,fees=0;
-      rowSet.forEach(r=>{ const [,,,,,si,,,count,f]=r; total+=count; fees+=f; if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count; });
-      return {total,done,fail,fees};
+      let total=0,done=0,fail=0,fees=0,ships=0;
+      rowSet.forEach(r=>{ const [,,,,,si,,,count,f,sh]=r; total+=count; fees+=f; ships+=(sh||0); if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count; });
+      return {total,done,fail,fees,ships};
     }
 
     // ---- Phase 6A: pickupDays helpers (additive, not used by any
