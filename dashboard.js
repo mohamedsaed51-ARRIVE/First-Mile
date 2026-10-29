@@ -3,7 +3,8 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 (function(){
 
 
-  const appState = { lang: (CONFIG.DEFAULT_LANG==='ar'?'ar':'en') };
+  // اللغة الابتدائية: ?lang= ثم المحفوظة (localStorage) ثم الافتراضي — عبر نواة الترجمة المشتركة (arrive-i18n.js)
+  const appState = { lang: (window.ArriveI18n ? ArriveI18n.getLang() : (CONFIG.DEFAULT_LANG==='ar'?'ar':'en')) };
   // PHASE 0A: i18n strings + formatting helpers now live in i18n.js /
   // formatters.js. These wrappers keep every call site below (t(...),
   // typeLabel(...), esc(...), etc.) unchanged — only where the data/logic
@@ -24,10 +25,14 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const key = el.getAttribute('data-i18n-placeholder');
       el.setAttribute('placeholder', t(key));
     });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria'))); });
+    document.querySelectorAll('[data-i18n-title]').forEach(el=>{ el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
+    document.title = t('pageTitle');
   }
 
   document.getElementById('langBtn').addEventListener('click', ()=>{
     appState.lang = appState.lang==='ar' ? 'en' : 'ar';
+    if(window.ArriveI18n) ArriveI18n.setLang(appState.lang);   // حفظ اللغة + lang/dir + إعلام البوابة
     applyStaticTranslations();
     // Relabels the filter panel's dynamically-built controls (dropdown
     // buttons, quick-date presets, fees toggle, recorded badge) — these
@@ -362,7 +367,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         {label:t('kpiFailed'), icon:'fail', value:fmtNum(fail), foot:`${total?(fail/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiSuccessRate'), icon:'rate', value:successRate.toFixed(1)+'%', foot:trendHtml(successRate, prevSuccessRate, true)},
         {label:t('kpiExtraFees'), icon:'fees', value:fmtCurrency(fees), foot:trendHtml(fees, prevAgg?prevAgg.fees:null, true)},
-        {label:t('kpiAvgExtraFee'), icon:'avgfee', value:avgFee.toFixed(1)+(appState.lang==='ar'?' جنيه':' EGP'), foot:t('footPerRequest')},
+        {label:t('kpiAvgExtraFee'), icon:'avgfee', value:avgFee.toFixed(1)+t('currencySuffix'), foot:t('footPerRequest')},
         {label:t('kpiAvgPerCourier'), icon:'avgpd', value:avgPerDriver.toFixed(1), foot:t('footAcrossCouriers',{n:fmtNum(driverSet.size)})},
         {label:t('kpiActiveCouriers'), icon:'drivers', value:fmtNum(driverSet.size), foot:t('footOfRoster',{n:fmtNum(drivers.length)})},
         {label:t('kpiActiveCities'), icon:'cities', value:fmtNum(citySet.size), foot:t('footOfCovered',{n:fmtNum(cities.length)})},
@@ -616,7 +621,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const table = document.getElementById('salaryRefTable');
       document.getElementById('salaryRefNote').textContent = t('salaryRefNote',{n:salaryRef.length, t:drivers.length});
       table.innerHTML = `<tr><td style="font-weight:700;">${t('salaryColName')}</td><td style="font-weight:700;">${t('salaryColVehicle')}</td><td style="font-weight:700; text-align:end;">${t('salaryColSalary')}</td></tr>` +
-        salaryRef.map(s=>`<tr><td>${esc(s.name||'—')}</td><td>${esc(s.vehicle||'—')}</td><td style="text-align:end;">${s.fixed_salary!=null?fmtNum(s.fixed_salary)+(appState.lang==='ar'?' جنيه':' EGP'):'—'}</td></tr>`).join('');
+        salaryRef.map(s=>`<tr><td>${esc(s.name||'—')}</td><td>${esc(s.vehicle||'—')}</td><td style="text-align:end;">${s.fixed_salary!=null?fmtNum(s.fixed_salary)+t('currencySuffix'):'—'}</td></tr>`).join('');
     }
 
     function renderDQ(){

@@ -23,7 +23,7 @@ window.DashboardFormatters = (function(){
     }
     function locale(){ return getLang()==='ar' ? 'ar-EG-u-nu-latn' : 'en-US'; }
     function fmtNum(n){ return Math.round(n).toLocaleString(locale()); }
-    function fmtCurrency(n){ return fmtNum(n) + (getLang()==='ar' ? ' جنيه' : ' EGP'); }
+    function fmtCurrency(n){ return fmtNum(n) + window.DashboardI18n.t(getLang(), 'currencySuffix'); }
 
     return { monthLabel, locale, fmtNum, fmtCurrency, rateClass };
   }
