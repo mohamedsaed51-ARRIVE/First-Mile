@@ -119,7 +119,17 @@ window.DashboardReportAnalytic = (function(){
     const dash = '—';
     const cur = n => n==null ? dash : fmtCurrency(n);
     const cur2 = n => n==null ? dash : fmtCurrency(Math.round(n*100)/100);
+    function driverCostRestricted(data){
+      const b = data.body, T = b.totals, na = t('rtRestricted');
+      const body = b.rows.map(r=>`<tr${r.hasSalary?'':' class="rp-row-muted"'}><td>${r.rank}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td>
+        <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${r.months||dash}</td><td>${r.hasSalary ? esc(r.missing ? t('rtSalaryPartial') : t('rtSalaryOnFile')) : esc(t('rtSalaryNone'))}</td></tr>`);
+      const foot = `<tr><td></td><td>${esc(t('rtTotal'))}</td><td></td><td class="num">${fmtNum(T.customers)}</td><td class="num">${fmtNum(T.ships)}</td><td></td><td></td></tr>`;
+      const brBody = b.branchRows.map(r=>`<tr><td>${esc(r.branch)}</td><td class="num">${fmtNum(r.couriers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${r.suppressed ? esc(t('rtColSuppressed',{min:b.minGroup})) : cur(r.cost)}</td><td class="num"><b>${r.perShip==null ? esc(na) : cur2(r.perShip)}</b></td><td>${r.excludedByFilter ? esc(t('rtScopeFlag',{n:r.excludedByFilter})) : ''}</td></tr>`);
+      return panel(t('rbDcBranchTable'), tbl([t('branchFilterLabel'), t('rtColCouriersCosted'), t('rtColShipments'), t('rtColBranchPayroll'), t('rtColCostPerShipBranch'), t('rtColScopeNote')], brBody, ''), t('rnDcMethodRestricted',{min:b.minGroup}), 'rp-flow') +
+        panel(t('rbDcTable'), tbl(['#', t('driverFilterLabel'), t('branchFilterLabel'), t('rtColCustomers'), t('rtColShipments'), t('rtColActiveMonths'), t('rtColSalaryStatus')], body, foot), t('rtDcRestrictedPoint',{min:b.minGroup}), 'rp-flow');
+    }
     function driverCost(data){
+      if(data.body && data.body.restricted) return driverCostRestricted(data);
       const b = data.body, T = b.totals;
       const body = b.rows.map(r=>`<tr${r.hasSalary?'':' class="rp-row-muted"'}><td>${r.rank}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td>
         <td class="num">${fmtNum(r.customers)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${cur(r.fixed)}</td><td class="num">${cur(r.extra)}</td>

@@ -292,7 +292,7 @@ window.DashboardReport = (function(){
     // التقارير التحليلية (سائقين، تجار، أسباب فشل، رسوم، فروع): ملف مستقل
     // يستعمل نفس دوال النطاق والملخص والغلاف من هذا الملف حتى لا تتكرر.
     const analytic = DashboardReportAnalyticData.create({
-      lookups, meta, thresholds, driverBranch: deps.driverBranch, salaryRef: deps.salaryRef,
+      lookups, meta, thresholds, driverBranch: deps.driverBranch, salaryRef: deps.salaryRef, salaryAccess: deps.salaryAccess, costFeed: deps.costFeed,
       t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine,
       base: { buildScope, buildSummary, buildCoverScopeLine }
     });

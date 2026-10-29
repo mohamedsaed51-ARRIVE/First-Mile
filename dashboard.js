@@ -139,7 +139,9 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // Phase 6A (additive): pickupDays is optional — defaults to [] so an
     // older/cached API response with no pickupDays field never breaks
     // dashboard load. rows/months/.../meta destructuring is unchanged.
-    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], driverBranch, salaryRef, meta } = DATA;
+    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], driverBranch, salaryRef: salaryRefRaw, meta } = DATA;
+    // الفصل المالي: الدور غير المصرّح لا يستلم salaryRef (salaryAccess='denied' + costFeed مجمّع). غياب الحقلين = السلوك القديم (granted).
+    const salaryAccess = DATA.salaryAccess || 'granted', costFeed = DATA.costFeed || null, salaryRef = salaryRefRaw || [];
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
     const TYPE_COLORS = ArriveDS.typeColors();
@@ -614,6 +616,16 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     function renderSalaryRef(){
       const table = document.getElementById('salaryRefTable');
+      if(salaryAccess === 'denied'){
+        // لا مبالغ فردية: مجاميع الفروع فقط (المجموعات الأصغر من الحد مخفية) + توضيح أن الحجب بسبب الصلاحية لا غياب البيانات
+        const fe = (costFeed && costFeed.byBranchMonth) || [], min = (costFeed && costFeed.minGroup) || 5;
+        document.getElementById('salaryRefNote').textContent = t('salaryRestrictedNote',{min});
+        const byBr = new Map();
+        fe.forEach(c=>{ const g = byBr.get(c.branch) || { branch:c.branch, cost:0, sup:false, couriers:0 }; if(c.suppressed) g.sup = true; else g.cost += c.cost; g.couriers = Math.max(g.couriers, c.couriers); byBr.set(c.branch, g); });
+        table.innerHTML = `<tr><td style="font-weight:700;">${t('branchFilterLabel')}</td><td style="font-weight:700;">${t('rtColCouriersCosted')}</td><td style="font-weight:700; text-align:end;">${t('rtColBranchPayroll')}</td></tr>` +
+          [...byBr.values()].map(g=>`<tr><td>${esc(g.branch)}</td><td>${fmtNum(g.couriers)}</td><td style="text-align:end;">${g.sup ? esc(t('rtColSuppressed',{min})) : fmtCurrency(g.cost)}</td></tr>`).join('');
+        return;
+      }
       document.getElementById('salaryRefNote').textContent = t('salaryRefNote',{n:salaryRef.length, t:drivers.length});
       table.innerHTML = `<tr><td style="font-weight:700;">${t('salaryColName')}</td><td style="font-weight:700;">${t('salaryColVehicle')}</td><td style="font-weight:700; text-align:end;">${t('salaryColSalary')}</td></tr>` +
         salaryRef.map(s=>`<tr><td>${esc(s.name||'—')}</td><td>${esc(s.vehicle||'—')}</td><td style="text-align:end;">${s.fixed_salary!=null?fmtNum(s.fixed_salary)+(appState.lang==='ar'?' جنيه':' EGP'):'—'}</td></tr>`).join('');
@@ -829,7 +841,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
-      driverBranch, salaryRef, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME, clientQuality: CQ },
+      driverBranch, salaryRef, salaryAccess, costFeed, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME, clientQuality: CQ },
       t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
       insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
     });

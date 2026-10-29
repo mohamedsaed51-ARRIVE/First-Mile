@@ -34,7 +34,7 @@ window.DashboardReportAnalyticData = (function(){
   ];
 
   function create(deps){
-    const { lookups, meta, thresholds, driverBranch, salaryRef, t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
+    const { lookups, meta, thresholds, driverBranch, salaryRef, salaryAccess, costFeed, t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
     const { months, cities, areas, drivers, clients, types, statuses, reasons } = lookups;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
@@ -364,7 +364,74 @@ window.DashboardReportAnalyticData = (function(){
     const money = n => fmtCurrency(n);
     const money2 = n => n==null ? null : fmtCurrency(Math.round(n*100)/100);
 
+    // الدور غير المصرّح: لا مبالغ فردية. تكلفة الفرع/شحنة من costFeed المجمّع؛ «بلا مرتب» من coverage (وجود صف فقط) — لا يُخلط «محجوب» بـ«غير موجود».
+    function buildDriverCostRestricted(agg, state){
+      const R = skeleton('driverCost', agg, state);
+      const feed = costFeed || { minGroup:5, byBranchMonth:[], coverage:[] };
+      const scopeMonths = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
+      const scopeNums = new Set(scopeMonths.map(monthNum)); 
+      const cov = new Map();
+      (feed.coverage||[]).forEach(c=>{ const k = normName(c.name); if(!cov.has(k)) cov.set(k, new Set()); cov.get(k).add(c.month||0); });
+      const m = new Map();
+      agg.fr.forEach(r=>{
+        let g = m.get(r[3]);
+        if(!g){ g = { di:r[3], clients:new Set(), months:new Set(), reqs:0, ships:0 }; m.set(r[3], g); }
+        g.clients.add(r[6]); g.months.add(r[0]); g.reqs += r[8]; g.ships += (r[10]||0);
+      });
+      const rows = Array.from(m.values()).map(g=>{
+        const name = drivers[g.di].trim(), c = cov.get(normName(name));
+        let salMonths = 0, missing = 0;
+        if(c) scopeMonths.forEach(mi=>{ if(c.has(monthNum(mi)) || c.has(0)) salMonths++; else if(g.months.has(mi)) missing++; });
+        return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships, fixed:null, extra:null, months:salMonths, missing, cost:null, perShip:null, hasSalary: salMonths>0, restricted:true };
+      }).sort((a,b)=>b.ships-a.ships || b.reqs-a.reqs);
+      rows.forEach((r,i)=>{ r.rank = i+1; });
+      // أسماء من لهم صف مرتب ضمن أشهر الفترة، لكل فرع (لكشف الفلاتر التي تستبعد مناديب محتسبين في مجموع الفرع)
+      const nameToBranch = new Map(); drivers.forEach((d,di)=>nameToBranch.set(normName(d), branchOf(di)));
+      const coveredByBranch = new Map();
+      cov.forEach((months, k)=>{ const br = nameToBranch.get(k); if(!br) return; if(!Array.from(months).some(x=>x===0 || scopeNums.has(x))) return; (coveredByBranch.get(br) || coveredByBranch.set(br, new Set()).get(br)).add(k); });
+      const min = feed.minGroup || 5;
+      const brMap = new Map();
+      rows.filter(r=>r.hasSalary && r.branch).forEach(r=>{ const b = brMap.get(r.branch) || { branch:r.branch, couriers:new Set(), ships:0 }; b.couriers.add(normName(r.name)); b.ships += r.ships; brMap.set(r.branch, b); });
+      const branchRows = Array.from(brMap.values()).map(b=>{
+        const cells = (feed.byBranchMonth||[]).filter(c=>c.branch===b.branch && (c.month===0 || scopeNums.has(c.month)));
+        const suppressed = cells.length===0 || cells.some(c=>c.suppressed);
+        const cost = suppressed ? null : cells.reduce((s,c)=>s+c.cost, 0);
+        const covered = coveredByBranch.get(b.branch) || new Set();
+        const excluded = Array.from(covered).filter(k=>!b.couriers.has(k)).length;   // مناديب مرتباتهم داخل مجموع الفرع لكنهم خارج الفلاتر
+        return { branch:b.branch, couriers:b.couriers.size, ships:b.ships, cost, suppressed, perShip:(!suppressed && b.ships>0) ? cost/b.ships : null, excludedByFilter:excluded };
+      }).sort((a,b)=>(b.perShip==null?-1:b.perShip) - (a.perShip==null?-1:a.perShip));
+      const okB = branchRows.filter(b=>b.perShip!=null);
+      const costTotal = okB.reduce((s,b)=>s+b.cost,0), shipsB = okB.reduce((s,b)=>s+b.ships,0);
+      const avgPerShip = shipsB>0 ? costTotal/shipsB : null;
+      const allClients = new Set(); agg.fr.forEach(r=>allClients.add(r[6]));
+      const noSalary = rows.filter(r=>!r.hasSalary), partial = rows.filter(r=>r.hasSalary && r.missing>0);
+      const scopeNotes = branchRows.filter(b=>b.excludedByFilter>0);
+      R.kpis = [
+        kpi(t('kpiActiveCouriers'), fmtNum(rows.length), 'main'),
+        kpi(t('kpiTotalShipments'), fmtNum(agg.ships), 'main'),
+        kpi(t('rtKpiCustomers'), fmtNum(allClients.size), 'main'),
+        kpi(t('rtKpiAvgCostShipBranch'), avgPerShip==null ? t('rtRestricted') : money2(avgPerShip), 'main'),
+        kpi(t('rtKpiNoSalary'), fmtNum(noSalary.length), noSalary.length ? 'bad' : 'good')
+      ];
+      R.keyPoints.push(t('rtDcPoint1',{n:ltr(fmtNum(rows.length)), ships:ltr(fmtNum(agg.ships)), cust:ltr(fmtNum(allClients.size))}));
+      R.keyPoints.push(t('rtDcRestrictedPoint',{min}));
+      if(avgPerShip!=null) R.keyPoints.push(t('rtDcPoint2',{avg:ltr(money2(avgPerShip))}));
+      if(noSalary.length) R.keyPoints.push(t('rtDcPoint4',{n:ltr(fmtNum(noSalary.length))}));
+      const rankedB = okB.slice().sort((a,b)=>b.perShip-a.perShip);
+      if(rankedB.length) R.findings.push({ key:'dcbranchhigh', label:t('rtFindDcBranchHigh'), detail: rankedB.slice(0,5).map(b=>`${b.branch} (${money2(b.perShip)})`).join(', ') });
+      if(noSalary.length) R.findings.push({ key:'dcnosalary', label:t('rtFindDcNoSalary'), detail: noSalary.slice(0,8).map(r=>r.name).join(', ') + (noSalary.length>8 ? ` +${noSalary.length-8}` : '') });
+      if(partial.length) R.findings.push({ key:'dcpartial', label:t('rtFindDcPartial'), detail: partial.slice(0,8).map(r=>r.name).join(', ') + (partial.length>8 ? ` +${partial.length-8}` : '') });
+      if(scopeNotes.length) R.findings.push({ key:'dcscope', label:t('rtFindDcScope'), detail: scopeNotes.slice(0,8).map(b=>`${b.branch} (${b.excludedByFilter})`).join(', ') });
+      R.notes.push(t('rnDcMethodRestricted',{min}));
+      R.notes.push(t('rnDcNoShip'));
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
+      R.body = { restricted:true, minGroup:min, rows, branchRows, totals:{ couriers:rows.length, customers:allClients.size, reqs:agg.total, ships:agg.ships, cost:null, avgPerShip } };
+      R.managementMessage = R.keyPoints;
+      return R;
+    }
+
     function buildDriverCost(agg, state){
+      if(salaryAccess === 'denied') return buildDriverCostRestricted(agg, state);
       const R = skeleton('driverCost', agg, state);
       const scopeMonths = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
       const m = new Map();
