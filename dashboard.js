@@ -665,13 +665,15 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // (→ filters.js) as the on-screen dashboard, so every filter in the
     // panel — period, location, operational, search — is reflected in
     // what gets exported, not just the month range like before.
+    // Formula Injection: نص يبدأ بـ = + - @ Tab CR يُسبق بـ ' ثم يُغلَّف بعلامات اقتباس مع تهريب " (كان الاسم يُكتب كما هو)
+    function csvText(v){ let t=String(v==null?'':v); if(/^[=+\-@\t\r]/.test(t)) t="'"+t; return '"'+t.replace(/"/g,'""')+'"'; }
     function exportCSV(){
       const fr = filteredRows();
       const driverAgg = {};
       fr.forEach(r=>{ const [,,,di,,si,,,count,f]=r; if(!driverAgg[di]) driverAgg[di]={count:0,done:0,fees:0}; driverAgg[di].count+=count; driverAgg[di].fees+=f; if(si===DONE_IDX) driverAgg[di].done+=count; });
       const driverList = Object.keys(driverAgg).map(di=>{ const a=driverAgg[di]; return {name:drivers[di].trim(), requests:a.count, success_rate:a.count?(a.done/a.count*100).toFixed(1):'0', extra_fees:a.fees}; }).sort((a,b)=>b.requests-a.requests);
       const header=[t('courierHeader'),t('requestsHeader'),t('successHeader')+' %',t('extraFeesHeader')+' (EGP)'];
-      const csvRows=[header.join(',')].concat(driverList.map(d=>[`"${d.name}"`, d.requests, d.success_rate, d.extra_fees].join(',')));
+      const csvRows=[header.join(',')].concat(driverList.map(d=>[csvText(d.name), d.requests, d.success_rate, d.extra_fees].join(',')));
       const blob=new Blob(["\uFEFF"+csvRows.join('\n')], {type:'text/csv;charset=utf-8;'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`first-mile-courier-leaderboard_${months[state.monthFrom]}_to_${months[state.monthTo]}.csv`;

@@ -198,12 +198,13 @@ function doGet(e) {
     return jsonOutput(payload);
 
   } catch (err) {
+    Logger.log(err && err.stack);
     // CRITICAL: always return valid JSON, never let Apps Script's default
     // HTML error page reach the dashboard's res.json() call.
     return jsonOutput({
       error: true,
-      message: String(err && err.message ? err.message : err),
-      stack: err && err.stack ? String(err.stack) : null
+      message: String(err && err.message ? err.message : err)
+      // تم حذف stack من الرد العام (تسريب مسارات داخلية)؛ يبقى في سجل Apps Script
     });
   }
 }
