@@ -205,7 +205,6 @@ window.DashboardReport = (function(){
       return {
         failShare: pct(agg.fail, agg.total),
         byBranch: topFailures(groupBy(agg.fr, r=>branchOf(r[3])), g=>g.key),
-        byArea:   topFailures(groupBy(agg.fr, r=>r[2]), g=>areas[g.key], g=>({city:g.city})),
         byDriver: topFailures(groupBy(agg.fr, r=>r[3]), g=>drivers[g.key].trim())
       };
     }
