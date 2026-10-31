@@ -34,7 +34,7 @@ window.DashboardReportAnalyticData = (function(){
   ];
 
   function create(deps){
-    const { lookups, meta, thresholds, driverBranch, salaryRef, t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
+    const { lookups, meta, thresholds, driverBranch, salaryRef, rowsForMonth, t, statusLabel, typeLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass, insightsEngine, base } = deps;
     const { months, cities, areas, drivers, clients, types, statuses, reasons } = lookups;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
@@ -56,9 +56,9 @@ window.DashboardReportAnalyticData = (function(){
       fr.forEach(r=>{
         const k = keyFn(r);
         let g = m.get(k);
-        if(!g){ g = { key:k, total:0, done:0, fail:0, fees:0, reasons:{}, drivers:new Set(), cities:new Set() }; m.set(k, g); }
+        if(!g){ g = { key:k, total:0, done:0, fail:0, fees:0, ships:0, reasons:{}, drivers:new Set(), cities:new Set() }; m.set(k, g); }
         const count = r[8];
-        g.total += count; g.fees += r[9];
+        g.total += count; g.fees += r[9]; g.ships += (r[10]||0);
         if(r[5]===DONE_IDX) g.done += count;
         else if(r[5]===FAIL_IDX){ g.fail += count; g.reasons[r[7]] = (g.reasons[r[7]]||0) + count; }
         g.drivers.add(r[3]); g.cities.add(r[1]);
@@ -153,13 +153,44 @@ window.DashboardReportAnalyticData = (function(){
     // ======================================================================
     // 2) التجار
     // ======================================================================
+    // مقارنة العملاء: الشهر الحالي (آخر شهر في الفترة المختارة) مقابل الشهر السابق له مباشرة، بنفس الفلاتر الفعالة.
+    // المتوقف = كان له طلبات في الشهر السابق (≥ الحد الأدنى) ولا طلبات له في الحالي.
+    // البيك أب القليل = انخفضت طلباته في الحالي بنسبة ≥ حد الانخفاض عن السابق. الحدّان افتراض تشغيلي مقترح لا حد معتمد.
+    const CMP_DROP = 0.5;
+    function buildClientTrend(state){
+      const sel = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
+      const cur = sel.length ? sel[sel.length-1] : -1, prev = cur-1;
+      const minPrev = (thresholds.clientQuality && thresholds.clientQuality.minReqs) || 10;
+      const res = { available:false, minPrev, drop:CMP_DROP, curLabel:'', prevLabel:'', stopped:[], low:[], stoppedCount:0, lowCount:0, stoppedLost:0, lowLost:0, partialCur:false };
+      if(cur<0) return res;
+      res.curLabel = monthLabel(months[cur]);
+      if(prev<0 || typeof rowsForMonth!=='function') return res;
+      res.prevLabel = monthLabel(months[prev]);
+      res.available = true;
+      res.partialCur = (meta.partialMonths||[]).indexOf(months[cur])>=0;
+      const sumBy = rs => { const m=new Map(); rs.forEach(r=>m.set(r[6],(m.get(r[6])||0)+r[8])); return m; };
+      const curM = sumBy(rowsForMonth(cur)), prevM = sumBy(rowsForMonth(prev));
+      const stopped = [], low = [];
+      prevM.forEach((pv,cl)=>{
+        if(pv<minPrev) return;
+        const cv = curM.get(cl)||0;
+        if(cv===0) stopped.push({ name:clients[cl], prev:pv, cur:0, change:-pv, pct:-100 });
+        else if(cv<=pv*(1-CMP_DROP)) low.push({ name:clients[cl], prev:pv, cur:cv, change:cv-pv, pct:(cv-pv)/pv*100 });
+      });
+      stopped.sort((a,b)=>b.prev-a.prev);
+      low.sort((a,b)=>a.change-b.change);
+      Object.assign(res, { stopped, low, stoppedCount:stopped.length, lowCount:low.length,
+        stoppedLost: stopped.reduce((x,r)=>x+r.prev,0), lowLost: low.reduce((x,r)=>x-r.change,0) });
+      return res;
+    }
+
     function buildMerchants(agg, state){
       const R = skeleton('merchants', agg, state);
       const groups = group(agg.fr, r=>r[6]);
       const rows = groups.map(g=>{
         const tr = topReasonOf(g);
         return { name: clients[g.key], total:g.total, done:g.done, fail:g.fail, rate:rateOf(g),
-          share: pct(g.total, agg.total), fees:g.fees, topReason: tr ? tr.name : null };
+          share: pct(g.total, agg.total), fees:g.fees, ships:g.ships, topReason: tr ? tr.name : null };
       }).sort(byTotalDesc);
       rows.forEach((r,i)=>{ r.rank = i+1; });
       const totals = { total:agg.total, done:agg.done, fail:agg.fail, fees:agg.fees, rate:pct(agg.done, agg.total) };
@@ -175,18 +206,36 @@ window.DashboardReportAnalyticData = (function(){
         kpi(t('rtKpiTop5Share'), p1(top5Share), 'main'),
         kpi(t('rtKpiMerchantsBad',{n:MIN_C}), fmtNum(attention.length), attention.length ? 'bad':'good')
       ];
+      const trend = buildClientTrend(state);
+      if(trend.available){
+        R.kpis.push(kpi(t('rtKpiStopped'), fmtNum(trend.stoppedCount), trend.stoppedCount ? 'bad':'good'));
+        R.kpis.push(kpi(t('rtKpiLowPickup'), fmtNum(trend.lowCount), trend.lowCount ? 'bad':'good'));
+      }
       if(rows.length){
         R.keyPoints.push(t('rtMerPoint1',{n:ltr(fmtNum(rows.length)), total:ltr(fmtNum(agg.total))}));
         R.keyPoints.push(t('rtMerPoint2',{name:esc(rows[0].name), share:ltr(p1(rows[0].share)), top5:ltr(p1(top5Share))}));
         R.keyPoints.push(t('rtMerPoint3',{n:ltr(fmtNum(attention.length)), min:ltr(MIN_C)}));
       }
+      if(trend.available){
+        const tv = { cur:trend.curLabel, prev:trend.prevLabel, n:ltr(fmtNum(trend.stoppedCount)), reqs:ltr(fmtNum(trend.stoppedLost)), m:ltr(fmtNum(trend.lowCount)), lost:ltr(fmtNum(trend.lowLost)) };
+        R.keyPoints.push(t('rtMerPointStopped',tv));
+        R.keyPoints.push(t('rtMerPointLow',tv));
+        if(trend.stoppedCount) R.findings.push({ key:'stopped', label:t('rtFindStopped'),
+          detail: trend.stopped.slice(0,5).map(r=>`${r.name} (${fmtNum(r.prev)})`).join(', ') });
+        if(trend.lowCount) R.findings.push({ key:'lowpickup', label:t('rtFindLowPickup'),
+          detail: trend.low.slice(0,5).map(r=>`${r.name} (${fmtNum(r.prev)} → ${fmtNum(r.cur)})`).join(', ') });
+      } else R.notes.push(t('rnMerNoPrev'));
       if(attention.length) R.findings.push({ key:'merchants', label:t('rtFindMerchantsPoor'),
         detail: attention.slice(0,5).map(r=>`${r.name} (${r.rate.toFixed(1)}%)`).join(', ') });
       if(rows.length) R.findings.push({ key:'concentration', label:t('rtFindConcentration'),
         detail: top5.map(r=>`${r.name} (${r.share.toFixed(1)}%)`).join(', ') });
 
       R.notes.push(t('rnMinMerchant',{n:MIN_C}));
-      R.body = { rows, totals, top: rows.slice(0,TOP_N), attention: attention.slice(0,TOP_N), attentionCount: attention.length, minVolume: MIN_C };
+      if(trend.available){
+        R.notes.push(t('rnMerTrendMethod',{cur:trend.curLabel, prev:trend.prevLabel, min:trend.minPrev, drop:Math.round(trend.drop*100)}));
+        if(trend.partialCur) R.notes.push(t('rnMerTrendPartial',{cur:trend.curLabel}));
+      }
+      R.body = { trend, rows, totals, top: rows.slice(0,TOP_N), attention: attention.slice(0,TOP_N), attentionCount: attention.length, minVolume: MIN_C };
       R.managementMessage = R.keyPoints;
       return R;
     }

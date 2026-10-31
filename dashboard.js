@@ -827,7 +827,9 @@ const CONFIG = window.ARRIVE_CONFIG || {};
 
     const reportBuilder = DashboardReport.createReportBuilder({
       lookups: { months, cities, areas, branches, drivers, clients, types, statuses, reasons },
-      driverBranch, salaryRef, meta, thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME, clientQuality: CQ },
+      driverBranch, salaryRef, meta,
+      rowsForMonth: mi => applyQuality(filterEngine.filterRowsByMonthRange(state, mi, mi)),
+      thresholds: { minDriverVolume: MIN_QUALIFYING_DRIVER_VOLUME, minCityVolume: MIN_QUALIFYING_CITY_VOLUME, clientQuality: CQ },
       t, typeLabel, statusLabel, monthLabel, fmtNum, fmtCurrency, esc, rateClass,
       insightsEngine: { computeInsightCards, computeRecommendationItems, computeTopBottomDrivers }
     });

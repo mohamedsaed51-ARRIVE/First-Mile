@@ -82,14 +82,30 @@ window.DashboardReportAnalytic = (function(){
     }
     function merchants(data){
       const b = data.body;
-      const top = tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShare'), t('successHeader')],
-        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
+      const top = tbl(['#', t('rtColClient'), t('requestsHeader'), t('rtColShare'), t('rtColShips'), t('successHeader')],
+        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td><td class="num">${fmtNum(r.ships||0)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
       const attn = b.attention.length
-        ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('successHeader')],
+        ? tbl(['#', t('rtColClient'), t('requestsHeader'), t('successHeader')],
             b.attention.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${rateCell(r.rate)}</td></tr>`))
         : empty(t('rtMerNoAttention',{n:b.minVolume}));
       const attnNote = b.attentionCount>LIST_N ? t('rtMerAttentionMore',{n:LIST_N, c:fmtNum(b.attentionCount)}) : t('rbMinNote',{n:b.minVolume});
-      return grid(panel(t('rbMerTop'), top), panel(t('rbMerAttn'), attn, attnNote));
+      let html = grid(panel(t('rbMerTop'), top), panel(t('rbMerAttn'), attn, attnNote));
+      const tr = b.trend;
+      if(tr && tr.available){
+        const N = 10, hv = {cur:tr.curLabel, prev:tr.prevLabel};
+        const stopped = tr.stopped.length
+          ? tbl(['#', t('rtColClient'), t('rtColPrevReqs',hv)],
+              tr.stopped.slice(0,N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td></tr>`))
+          : empty(t('rtMerNoStopped'));
+        const low = tr.low.length
+          ? tbl(['#', t('rtColClient'), t('rtColPrevReqs',hv), t('rtColCurReqs',hv), t('rtColChangePct')],
+              tr.low.slice(0,N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td><td class="num">${fmtNum(r.cur)}</td><td class="num"><span class="ltr">${r.pct.toFixed(1)}%</span></td></tr>`))
+          : empty(t('rtMerNoLow'));
+        const more = (cnt) => cnt>N ? t('rtMerTrendMore',{n:N, c:fmtNum(cnt)}) : '';
+        html += grid(panel(t('rbMerStopped',hv), stopped, more(tr.stoppedCount)||t('rbMerStoppedNote',{min:tr.minPrev})),
+                     panel(t('rbMerLow',hv), low, more(tr.lowCount)||t('rbMerLowNote',{min:tr.minPrev, drop:Math.round(tr.drop*100)})));
+      }
+      return html;
     }
     function reasons(data){
       const b = data.body;
