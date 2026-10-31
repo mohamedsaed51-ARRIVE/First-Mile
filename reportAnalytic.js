@@ -192,9 +192,10 @@ window.DashboardReportAnalytic = (function(){
         `<tr><td>${esc(t('cqMid'))}</td><td class="num">${fmtNum(b.midCount)}</td><td class="num">—</td><td class="num">—</td></tr>`,
         `<tr><td>${esc(t('cqLow'))}</td><td class="num">${fmtNum(b.lowCount)}</td><td class="num">${fmtNum(b.lowReqs)}</td><td class="num">${fmtNum(b.lowShips)}</td></tr>`,
         `<tr class="rp-row-muted"><td>${esc(t('cqNa'))}</td><td class="num">${fmtNum(b.naCount)}</td><td class="num">—</td><td class="num">—</td></tr>`]);
+      // الجدولان بثمانية أعمدة: يُعرضان فوق بعض (وليس متجاورين) حتى لا يتجاوز عرضهما إطار التقرير
       return panel(t('rbCqDist'), dist)
-        + grid(panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : ''),
-               panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : ''));
+        + panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : '')
+        + panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : '');
     }
     const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status, clientQuality };
 

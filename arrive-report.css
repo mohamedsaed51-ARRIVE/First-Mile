@@ -358,3 +358,8 @@ tr.rp-row-muted td{color:var(--text-secondary); background:var(--gray-50);}
 .report-kpi-sub{margin-top:4px; font-size:var(--fs-caption); color:var(--text-secondary); font-weight:var(--fw-semibold);}
 .report-grid-flat > .panel:first-child{grid-column:auto !important;}
 .report-grid-flat{margin-bottom:var(--space-4);}
+
+/* منع تمدد الجداول خارج إطار التقرير: عناصر الشبكة تنكمش، والجدول العريض يتمرر داخل لوحته */
+.rp-grid-2 > *, .report-grid-2 > *{min-width:0;}
+.report-body .panel{max-width:100%; overflow-x:auto;}
+@media print{ .report-body .panel{overflow:visible;} }
