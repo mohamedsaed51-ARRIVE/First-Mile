@@ -160,7 +160,7 @@ window.DashboardReportPreview = (function(){
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('rpSecCustomers'))}
         ${panel(t('rpTopCustomers'), table(head, topRows))}
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('rpWorstCustomers'))}</div></div><div class="rp-foot-note">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</div>${table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows)}</div>
+        <div class="panel rp-newpage"><div class="panel-head"><div class="panel-title">${esc(t('rpWorstCustomers'))}</div></div><div class="rp-foot-note">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</div>${table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows)}</div>
       </section>`;
     }
 
