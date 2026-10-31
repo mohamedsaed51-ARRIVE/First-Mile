@@ -79,39 +79,6 @@ window.DashboardReportPreview = (function(){
       </section>`;
     }
 
-    // رسالة إلى الإدارة: أسطر جاهزة من reportData.js
-    function renderManagementMessage(lines){
-      if(!lines || !lines.length) return '';
-      return `<div class="rp-callout">
-        <div class="rp-callout-title">${esc(t('reportManagementMessageTitle'))}</div>
-        <ul class="rp-callout-list">${lines.map(l=>`<li>${l}</li>`).join('')}</ul>
-      </div>`;
-    }
-
-    function scopeRow(label, value){
-      return `<div class="report-scope-item"><span class="report-scope-label">${esc(label)}</span><span class="report-scope-value">${esc(value)}</span></div>`;
-    }
-
-    function renderScope(scope, n){
-      return `<section class="rp-section">
-        ${sectionHeader(n, t('reportSecScope'))}
-        <p class="rp-lead">${esc(t('reportScopeMethod'))}</p>
-        <div class="report-scope-grid">
-          ${scopeRow(t('periodLabel'), scope.period)}
-          ${scopeRow(t('cityLabel'), scope.city)}
-          ${scopeRow(t('branchFilterLabel'), scope.branch)}
-          ${scopeRow(t('areaFilterLabel'), scope.area)}
-          ${scopeRow(t('statusLabel'), scope.requestStatus)}
-          ${scopeRow(t('requestTypeLabel'), scope.requestType)}
-          ${scopeRow(t('driverFilterLabel'), scope.driver)}
-          ${scopeRow(t('merchantFilterLabel'), scope.client)}
-          ${scopeRow(t('reasonFilterLabel'), scope.reason)}
-          ${scopeRow(t('extraFeesFilterLabel'), scope.extraFees)}
-          ${scopeRow(t('searchSectionLabel'), scope.search)}
-        </div>
-      </section>`;
-    }
-
     // Phase 5: KPI_KEY_MAP ties each Executive Summary card to the matching
     // comparison.js kpi (by the SAME `key` comparison.js already assigns —
     // see KPI_POLARITY in comparison.js). Used only to look up an
@@ -120,24 +87,21 @@ window.DashboardReportPreview = (function(){
 
     function renderSummary(summary, comparison, mgmtLines, n){
       const findKpi = key => comparison ? comparison.kpis.find(k=>k.key===key) : null;
+      const sharePct = v => (summary.totalRequests ? v/summary.totalRequests*100 : 0).toFixed(1)+'%';
+      // كرتا المكتمل والفاشل: النسبة والعدد في نفس الكرت
+      const countSub = v => `<div class="report-kpi-sub"><span class="ltr">${esc(fmtNum(v))}</span> ${esc(t('requestsHeader'))}</div>`;
       const cards = [
-        [t('kpiTotalRequests'), summary.totalRequestsLabel, findKpi(SUMMARY_KPI_KEYS.totalRequests), 'main'],
-        [t('kpiTotalShipments'), summary.totalShipmentsLabel, null, 'main'],
-        [t('kpiCompleted'), summary.successfulRequestsLabel, findKpi(SUMMARY_KPI_KEYS.successfulRequests), 'good'],
-        [t('kpiFailed'), summary.failedRequestsLabel, findKpi(SUMMARY_KPI_KEYS.failedRequests), 'bad'],
-        [t('kpiSuccessRate'), summary.successRateLabel, findKpi(SUMMARY_KPI_KEYS.successRate), 'good'],
-        [t('kpiExtraFees'), summary.totalExtraFeesLabel, findKpi(SUMMARY_KPI_KEYS.totalExtraFees), 'main']
+        `<div class="report-kpi tone-main"><div class="report-kpi-label">${esc(t('kpiTotalRequests'))}</div><div class="report-kpi-value">${esc(summary.totalRequestsLabel)}</div></div>`,
+        `<div class="report-kpi tone-main"><div class="report-kpi-label">${esc(t('kpiTotalShipments'))}</div><div class="report-kpi-value">${esc(summary.totalShipmentsLabel)}</div></div>`,
+        `<div class="report-kpi tone-good"><div class="report-kpi-label">${esc(t('rpMgmtCompletedCard'))}</div><div class="report-kpi-value">${esc(sharePct(summary.successfulRequests))}</div>${countSub(summary.successfulRequests)}</div>`,
+        `<div class="report-kpi tone-bad"><div class="report-kpi-label">${esc(t('rpMgmtFailedCard'))}</div><div class="report-kpi-value">${esc(sharePct(summary.failedRequests))}</div>${countSub(summary.failedRequests)}</div>`
       ];
-      const deltaHtml = k => k ? `<div class="report-kpi-delta ${k.direction}"><span class="ltr">${arrowFor(k.direction)} ${esc(k.pctLabel)}</span></div>` : '';
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportSecSummary'))}
         <div class="rp-purpose"><div class="rp-purpose-title">${esc(t('rpPurposeTitle'))}</div><p>${esc(t('rpPurpose_management'))}</p></div>
-        ${renderManagementMessage(mgmtLines)}
         <div class="rp-mini-title rp-kpis-title">${esc(t('rpKpisTitle'))}</div>
         <div class="report-summary-layout">
-          <div class="report-kpis">
-            ${cards.map(([label,val,k,tone])=>`<div class="report-kpi tone-${tone}"><div class="report-kpi-label">${esc(label)}</div><div class="report-kpi-value">${esc(val)}</div>${deltaHtml(k)}</div>`).join('')}
-          </div>
+          <div class="report-kpis report-kpis-2">${cards.join('')}</div>
           <div class="report-donut-block">
             <div class="rp-mini-title">${esc(t('reportSummaryDonutTitle'))}</div>
             <div class="chart-box report-donut" id="reportSummaryDonut"></div>
@@ -152,76 +116,62 @@ window.DashboardReportPreview = (function(){
       return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
     }
 
-    // Phase 5: compact "Best Performers" / "Areas Requiring Attention"
-    // pill-list — renders the cityBest/cityAttention/areaBest/
-    // areaAttention/driverBest/driverAttention arrays reportData.js
-    // already derived (same successRate field, same qualifying-volume
-    // threshold, same rateClass cutoff used elsewhere in this project).
-    function bestAttentionList(rows, emptyKey, goodBadge){
-      if(!rows.length) return `<div class="empty-state">${esc(t(emptyKey))}</div>`;
-      return `<ul class="report-rank-list">${rows.map(r=>`<li><span class="report-rank-name">${esc(r.name)}</span><span class="rate-badge ${goodBadge?'rate-good':'rate-bad'}">${(r.successRate!==undefined?r.successRate:r.rate).toFixed(1)}%</span></li>`).join('')}</ul>`;
-    }
-    function renderBestAttention(perf){
-      return `<div class="report-best-attention">
-        <div class="report-best-attention-col report-best-col">
-          <div class="report-best-attention-heading good">${esc(t('reportBestPerformers'))}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('cityLabel'))}</div>${bestAttentionList(perf.cityBest,'reportNoQualifyingData',true)}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('areaFilterLabel'))}</div>${bestAttentionList(perf.areaBest,'reportNoQualifyingData',true)}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('driverFilterLabel'))}</div>${bestAttentionList(perf.driverBest,'reportNoQualifyingData',true)}</div>
-        </div>
-        <div class="report-best-attention-col report-attention-col">
-          <div class="report-best-attention-heading bad">${esc(t('reportAttentionRequired'))}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('cityLabel'))}</div>${bestAttentionList(perf.cityAttention,'reportNoAttentionItems',false)}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('areaFilterLabel'))}</div>${bestAttentionList(perf.areaAttention,'reportNoAttentionItems',false)}</div>
-          <div class="report-best-attention-group"><div class="report-rank-group-title">${esc(t('driverFilterLabel'))}</div>${bestAttentionList(perf.driverAttention,'reportNoAttentionItems',false)}</div>
-        </div>
-      </div>`;
-    }
+    const pctOf = (part, whole) => (whole ? part/whole*100 : 0).toFixed(1)+'%';
+    const panel = (title, inner) => `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}</div>`;
 
-    function renderPerformance(perf, n){
-      const top = (arr,n)=>arr.slice(0,n);
-      const cityRows = top(perf.cities,5).map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num"><span class="rate-badge ${rateClass(c.successRate)}">${c.successRate.toFixed(0)}%</span></td><td class="num">${fmtCurrency(c.fees)}</td></tr>`);
-      const areaRows = top(perf.areas,5).map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(0)}%</span></td></tr>`);
-      const driverRows = top(perf.drivers,5).map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(0)}%</span></td></tr>`);
+    // تحليل الأداء بالترتيب: (1) حالة الطلبات + نوعها (2) المناطق + السائقين (3) المدن
+    function renderPerformance(perf, summary, n){
+      const top = (arr,k)=>arr.slice(0,k);
       const statusRows = perf.statuses.map(s=>`<tr><td>${esc(s.name)}</td><td class="num">${fmtNum(s.total)}</td><td class="num">${s.share.toFixed(1)}%</td></tr>`);
       const typeRows = perf.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}</td><td class="num">${fmtNum(tp.total)}</td><td class="num">${tp.share.toFixed(1)}%</td></tr>`);
+      const areaRows = top(perf.areas,10).map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
+      const driverRows = top(perf.drivers,10).map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td></tr>`);
+      const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)} (${pctOf(c.done,c.total)})</td><td class="num">${fmtNum(c.fail)} (${pctOf(c.fail,c.total)})</td></tr>`);
 
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportPerformanceAnalysis'))}
-        ${renderBestAttention(perf)}
-        <div class="report-grid-2">
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>
-            <div class="chart-box" id="reportCityChart"></div>
-            <div class="chart-legend"><span><i style="background:${ArriveDS.color('done')}"></i><span>${esc(t('doneLegend'))}</span></span><span><i style="background:${ArriveDS.color('fail')}"></i><span>${esc(t('failLegend'))}</span></span></div>
-            ${table([t('cityLabel'),t('requestsHeader'),t('successHeader'),t('extraFeesHeader')], cityRows)}</div>
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportAreaPerformance'))}</div></div>${table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows)}</div>
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportDriverPerformance'))}</div></div>${table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows)}</div>
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportStatusBreakdown'))}</div></div>${table([t('statusLabel'),t('requestsHeader'),'%'], statusRows)}</div>
-          <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportTypeBreakdown'))}</div></div>
-            <div class="report-donut-block"><div class="chart-box report-donut" id="reportTypeChart"></div><div class="chart-legend" id="reportTypeChartLegend"></div></div>
-            ${table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows)}</div>
+        <div class="report-grid-2 report-grid-flat">
+          ${panel(t('reportStatusBreakdown'), table([t('statusLabel'),t('requestsHeader'),'%'], statusRows))}
+          ${panel(t('reportTypeBreakdown'), `<div class="report-donut-block"><div class="chart-box report-donut" id="reportTypeChart"></div><div class="chart-legend" id="reportTypeChartLegend"></div></div>`+table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows))}
+          ${panel(t('reportAreaPerformance'), table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows))}
+          ${panel(t('reportDriverPerformance'), table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows))}
+        </div>
+          ${panel(t('reportCityPerformance'), `<div class="chart-box" id="reportCityChart"></div>
+            <div class="chart-legend"><span><i style="background:${ArriveDS.color('done')}"></i><span>${esc(t('doneLegend'))}</span></span><span><i style="background:${ArriveDS.color('fail')}"></i><span>${esc(t('failLegend'))}</span></span></div>`
+            + table([t('cityLabel'),t('rpOrdersTotalHeader'),t('rpCitySuccessHeader'),t('rpCityFailHeader')], cityRows))}
+      </section>`;
+    }
+
+    // تحليل أسباب الفشل: نسبة الفشل من الإجمالي ← الأسباب ← أكثر الفروع/المناطق/المناديب فشلًا
+    function renderFailureAnalysis(perf, summary, failure, n){
+      const reasonRows = perf.reasons.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${r.share.toFixed(1)}%</td></tr>`);
+      const failRows = (rows, withCity) => rows.map(r=>`<tr><td>${esc(r.name)}</td>${withCity?`<td>${esc(r.city||'')}</td>`:''}<td class="num">${fmtNum(r.total)}</td><td class="num">${fmtNum(r.fail)}</td><td class="num">${r.failRate.toFixed(1)}%</td></tr>`);
+      const base = [t('requestsHeader'),t('rpFailCountHeader'),t('rpFailRateHeader')];
+      return `<section class="rp-section rp-break">
+        ${sectionHeader(n, t('reportFailureAnalysisTitle'))}
+        <div class="report-kpis report-kpis-compact">
+          <div class="report-kpi tone-bad"><div class="report-kpi-label">${esc(t('rpFailShareLabel'))}</div><div class="report-kpi-value">${esc(failure.failShare.toFixed(1)+'%')}</div><div class="report-kpi-sub"><span class="ltr">${esc(summary.failedRequestsLabel)}</span> / <span class="ltr">${esc(summary.totalRequestsLabel)}</span></div></div>
+        </div>
+        ${perf.topFailureReasons.length ? `<div class="rp-alert">${esc(t('reportFailureConcentrationLine',{pct: perf.failureConcentrationPct.toFixed(1)+'%'}))}</div>` : ''}
+        ${panel(t('rpFailReasonsTitle'), `<div class="chart-box" id="reportReasonChart"></div>`+table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows))}
+        <div class="report-grid-2 report-grid-flat">
+          ${panel(t('rpFailTopBranches'), table([t('rpBranchHeader'),...base], failRows(failure.byBranch,false)))}
+          ${panel(t('rpFailTopAreas'), table([t('areaFilterLabel'),t('cityLabel'),...base], failRows(failure.byArea,true)))}
+          ${panel(t('rpFailTopDrivers'), table([t('driverFilterLabel'),...base], failRows(failure.byDriver,false)))}
         </div>
       </section>`;
     }
 
-    // Phase 5: Failure Analysis — pulled out as its own section per the
-    // brief. Uses summary.failedRequests(Label)/successRateLabel and
-    // perf.reasons/topFailureReasons/failureConcentrationPct — all
-    // already computed by reportData.js. Only the reason-breakdown chart
-    // container (reportReasonChart) moved here from Performance Analysis;
-    // charts.js's renderHBar call in renderCharts() below is unchanged.
-    function renderFailureAnalysis(perf, summary, n){
-      const reasonRows = perf.reasons.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${r.share.toFixed(1)}%</td></tr>`);
-      return `<section class="rp-section">
-        ${sectionHeader(n, t('reportFailureAnalysisTitle'))}
-        <div class="report-kpis report-kpis-compact">
-          <div class="report-kpi"><div class="report-kpi-label">${esc(t('kpiFailed'))}</div><div class="report-kpi-value">${esc(summary.failedRequestsLabel)}</div></div>
-          <div class="report-kpi"><div class="report-kpi-label">${esc(t('kpiSuccessRate'))}</div><div class="report-kpi-value">${esc(summary.successRateLabel)}</div></div>
-        </div>
-        ${perf.topFailureReasons.length ? `<div class="rp-alert">${esc(t('reportFailureConcentrationLine',{pct: perf.failureConcentrationPct.toFixed(1)+'%'}))}</div>` : ''}
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportReasonBreakdown'))}</div></div>
-          <div class="chart-box" id="reportReasonChart"></div>
-          ${table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows)}</div>
+    // تحليل العملاء: أكبر 10 بعدد الشحنات + أسوأ 10 بنسبة الفشل
+    function renderCustomers(customers, n){
+      const topRows = customers.top.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td></tr>`);
+      const worstRows = customers.worst.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge rate-bad">${c.failRate.toFixed(1)}%</span></td></tr>`);
+      const head = [t('rpCustomerHeader'),t('rpCustReqsHeader'),t('rpCustReqsPct'),t('rpCustShipsHeader'),t('rpCustShipsPct')];
+      return `<section class="rp-section rp-break">
+        ${sectionHeader(n, t('rpSecCustomers'))}
+        ${panel(t('rpTopCustomers'), table(head, topRows))}
+        ${panel(t('rpWorstCustomers'), table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows))}
+        <p class="rp-lead">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</p>
       </section>`;
     }
 
@@ -277,16 +227,16 @@ window.DashboardReportPreview = (function(){
     }
 
     function renderDetailedTables(perf, n){
-      const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)}</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge ${rateClass(c.successRate)}">${c.successRate.toFixed(1)}%</span></td><td class="num">${fmtCurrency(c.fees)}</td></tr>`);
-      const areaRows = perf.areas.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td><td class="num">${fmtCurrency(a.fees)}</td></tr>`);
-      const driverRows = perf.drivers.map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td><td class="num">${fmtCurrency(d.fees)}</td></tr>`);
+      const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)}</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge ${rateClass(c.successRate)}">${c.successRate.toFixed(1)}%</span></td></tr>`);
+      const areaRows = perf.areas.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
+      const driverRows = perf.drivers.map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td></tr>`);
       const reasonRows = perf.reasons.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${r.share.toFixed(1)}%</td></tr>`);
 
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportSecAppendix'))}
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>${table([t('cityLabel'),t('requestsHeader'),t('doneLegend'),t('failLegend'),t('successHeader'),t('extraFeesHeader')], cityRows)}</div>
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportAreaPerformance'))}</div></div>${table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader'),t('extraFeesHeader')], areaRows)}</div>
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportDriverPerformance'))}</div></div>${table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader'),t('extraFeesHeader')], driverRows)}</div>
+        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>${table([t('cityLabel'),t('requestsHeader'),t('doneLegend'),t('failLegend'),t('successHeader')], cityRows)}</div>
+        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportAreaPerformance'))}</div></div>${table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows)}</div>
+        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportDriverPerformance'))}</div></div>${table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows)}</div>
         <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportReasonBreakdown'))}</div></div>${table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows)}</div>
       </section>`;
     }
@@ -297,7 +247,6 @@ window.DashboardReportPreview = (function(){
       return `<section class="rp-section rp-break rp-closing">
         ${sectionHeader(n, t('reportSecClosing'))}
         <p class="rp-lead">${esc(t('reportClosingLead'))}</p>
-        ${data.managementMessage && data.managementMessage.length ? `<ul class="rp-callout-list rp-closing-list">${data.managementMessage.map(l=>`<li>${l}</li>`).join('')}</ul>` : ''}
         <div class="rp-alert rp-alert-info">${esc(data.type && data.type!=='management' ? t('rtClosingTodo') : t('reportClosingTodo'))}</div>
         <div class="rp-signs">${sign(t('reportSignPrepared'))}${sign(t('reportSignReviewed'))}${sign(t('reportSignApproved'))}</div>
         <div class="rp-closing-foot">
@@ -433,9 +382,9 @@ window.DashboardReportPreview = (function(){
       return [
         renderCover(data),
         renderSummary(data.summary, data.comparison, data.managementMessage, next()),
-        renderScope(data.scope, next()),
-        renderPerformance(data.performance, next()),
-        renderFailureAnalysis(data.performance, data.summary, next()),
+        renderPerformance(data.performance, data.summary, next()),
+        renderFailureAnalysis(data.performance, data.summary, data.failure, next()),
+        renderCustomers(data.customers, next()),
         data.comparison ? renderComparisonSection(data.comparison, next()) : '',
         renderFindings(data.attention, next()),
         renderKeyInsights(data.insights, next()),

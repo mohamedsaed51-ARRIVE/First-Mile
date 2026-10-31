@@ -182,6 +182,45 @@ window.DashboardReport = (function(){
       };
     }
 
+
+    // تحليل الفشل: أكثر الفروع/المناطق/المناديب فشلًا (بعدد الطلبات الفاشلة) — من نفس agg.fr المفلتر.
+    const DONE_I = statuses.indexOf('Done'), FAIL_I = statuses.indexOf('Fail');
+    function groupBy(fr, keyFn){
+      const m = new Map();
+      fr.forEach(r=>{
+        const k = keyFn(r);
+        let g = m.get(k);
+        if(!g){ g = { key:k, total:0, done:0, fail:0, ships:0, city:cities[r[1]] }; m.set(k,g); }
+        g.total += r[8]; g.ships += (r[10]||0);
+        if(r[5]===DONE_I) g.done += r[8]; else if(r[5]===FAIL_I) g.fail += r[8];
+      });
+      return Array.from(m.values());
+    }
+    function topFailures(groups, nameFn, extra){
+      return groups.filter(g=>g.fail>0).sort((a,b)=>b.fail-a.fail || b.total-a.total).slice(0,10)
+        .map(g=>Object.assign({ name:nameFn(g), total:g.total, fail:g.fail, failRate:pct(g.fail,g.total) }, extra?extra(g):{}));
+    }
+    function buildFailure(agg){
+      const branchOf = di => (deps.driverBranch && deps.driverBranch[di]) || t('rtBranchUnmapped');
+      return {
+        failShare: pct(agg.fail, agg.total),
+        byBranch: topFailures(groupBy(agg.fr, r=>branchOf(r[3])), g=>g.key),
+        byArea:   topFailures(groupBy(agg.fr, r=>r[2]), g=>areas[g.key], g=>({city:g.city})),
+        byDriver: topFailures(groupBy(agg.fr, r=>r[3]), g=>drivers[g.key].trim())
+      };
+    }
+
+    // تحليل العملاء: أكبر 10 بعدد الشحنات، وأسوأ 10 بنسبة الفشل (بحد أدنى للحجم يمنع تصدّر عملاء بطلبات قليلة).
+    function buildCustomers(agg){
+      const groups = groupBy(agg.fr, r=>r[6]);
+      const enrich = g=>({ name:clients[g.key], reqs:g.total, reqShare:pct(g.total,agg.total), ships:g.ships, shipShare:pct(g.ships,agg.ships||0), fail:g.fail, failRate:pct(g.fail,g.total) });
+      const top = groups.slice().sort((a,b)=>b.ships-a.ships || b.total-a.total).slice(0,10).map(enrich);
+      const minVol = thresholds.minDriverVolume;
+      const worst = groups.filter(g=>g.total>=minVol && g.fail>0)
+        .sort((a,b)=>pct(b.fail,b.total)-pct(a.fail,a.total) || b.fail-a.fail).slice(0,10).map(enrich);
+      return { top, worst, minVol };
+    }
+
     // Management Attention: every item here is derived strictly from
     // already-computed aggregates and the project's OWN existing
     // thresholds (rateClass's 75% "bad" cutoff, and the same qualifying-
@@ -212,12 +251,6 @@ window.DashboardReport = (function(){
       if(performance.reasons.length) items.push({
         key:'reasons', label:t('reportAttentionTopReason'),
         detail: performance.reasons.slice(0,3).map(r=>`${r.name} (${fmtNum(r.total)})`).join(', ')
-      });
-
-      const topFeesArea = performance.areas.slice().sort((a,b)=>b.fees-a.fees)[0];
-      if(topFeesArea && topFeesArea.fees>0) items.push({
-        key:'fees', label:t('reportAttentionHighFees'),
-        detail: `${topFeesArea.name} — ${fmtCurrency(topFeesArea.fees)}`
       });
 
       if(meta.partialMonths && meta.partialMonths.length) items.push({
@@ -270,6 +303,8 @@ window.DashboardReport = (function(){
       const scope = buildScope(state);
       const summary = buildSummary(agg);
       const performance = buildPerformance(agg);
+      const failure = buildFailure(agg);
+      const customers = buildCustomers(agg);
       const attention = buildAttention(agg, performance);
       const insights = insightsEngine.computeInsightCards(agg.driverAgg, agg.areaAgg, agg.clientAgg, agg.reasonAgg, agg.cityAgg, agg.typeAgg, agg.branchAgg);
       const recommendations = insightsEngine.computeRecommendationItems(agg.driverAgg, agg.areaAgg, agg.cityAgg, agg.reasonAgg, agg.branchAgg);
@@ -281,6 +316,8 @@ window.DashboardReport = (function(){
         scope,
         summary,
         performance,
+        failure,
+        customers,
         attention,
         insights,
         recommendations,
