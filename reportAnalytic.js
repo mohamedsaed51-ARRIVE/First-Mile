@@ -102,8 +102,8 @@ window.DashboardReportAnalytic = (function(){
     }
     function merchants(data){
       const b = data.body;
-      const top = tbl(['#', t('rtColClient'), t('requestsHeader'), t('rtColShare'), t('rtColShips'), t('successHeader')],
-        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td><td class="num">${fmtNum(r.ships||0)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
+      const top = tbl(['#', t('rtColClient'), t('rtColShipments'), t('rtColShipShare'), t('requestsHeader'), t('successHeader')],
+        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num"><b>${fmtNum(r.ships||0)}</b></td><td class="num">${p1(r.shipShare||0)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
       const attn = b.attention.length
         ? tbl(['#', t('rtColClient'), t('requestsHeader'), t('successHeader')],
             b.attention.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${rateCell(r.rate)}</td></tr>`))

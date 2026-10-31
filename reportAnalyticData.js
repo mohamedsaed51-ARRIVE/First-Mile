@@ -193,7 +193,7 @@ window.DashboardReportAnalyticData = (function(){
     function buildClientTrend(state){
       const sel = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
       const cur = sel.length ? sel[sel.length-1] : -1, prev = cur-1;
-      const minPrev = (thresholds.clientQuality && thresholds.clientQuality.minReqs) || 10;
+      const minPrev = (thresholds.clientQuality && thresholds.clientQuality.minReqs) || 10;   // بالشحنات
       const res = { available:false, minPrev, drop:CMP_DROP, curLabel:'', prevLabel:'', stopped:[], low:[], stoppedCount:0, lowCount:0, stoppedLost:0, lowLost:0, partialCur:false };
       if(cur<0) return res;
       res.curLabel = monthLabel(months[cur]);
@@ -201,7 +201,7 @@ window.DashboardReportAnalyticData = (function(){
       res.prevLabel = monthLabel(months[prev]);
       res.available = true;
       res.partialCur = (meta.partialMonths||[]).indexOf(months[cur])>=0;
-      const sumBy = rs => { const m=new Map(); rs.forEach(r=>m.set(r[6],(m.get(r[6])||0)+r[8])); return m; };
+      const sumBy = rs => { const m=new Map(); rs.forEach(r=>m.set(r[6],(m.get(r[6])||0)+(r[10]||0))); return m; };
       const curM = sumBy(rowsForMonth(cur)), prevM = sumBy(rowsForMonth(prev));
       const stopped = [], low = [];
       prevM.forEach((pv,cl)=>{
@@ -223,12 +223,12 @@ window.DashboardReportAnalyticData = (function(){
       const rows = groups.map(g=>{
         const tr = topReasonOf(g);
         return { name: clients[g.key], total:g.total, done:g.done, fail:g.fail, rate:rateOf(g),
-          share: pct(g.total, agg.total), fees:g.fees, ships:g.ships, topReason: tr ? tr.name : null };
-      }).sort(byTotalDesc);
+          share: pct(g.total, agg.total), shipShare: pct(g.ships, agg.ships||0), fees:g.fees, ships:g.ships, topReason: tr ? tr.name : null };
+      }).sort((a,b)=>b.ships-a.ships || b.total-a.total);
       rows.forEach((r,i)=>{ r.rank = i+1; });
       const totals = { total:agg.total, done:agg.done, fail:agg.fail, fees:agg.fees, rate:pct(agg.done, agg.total) };
       const top5 = rows.slice(0,5);
-      const top5Share = pct(top5.reduce((s,r)=>s+r.total,0), agg.total);
+      const top5Share = pct(top5.reduce((s,r)=>s+r.ships,0), agg.ships||0);   // حصة أعلى 5 بالشحنات
       const attention = rows.filter(r=>r.total>=MIN_C && rateClass(r.rate)==='rate-bad')
         .sort((a,b)=>a.rate-b.rate || b.total-a.total);
 
@@ -245,8 +245,8 @@ window.DashboardReportAnalyticData = (function(){
         R.kpis.push(kpi(t('rtKpiLowPickup'), fmtNum(trend.lowCount), trend.lowCount ? 'bad':'good'));
       }
       if(rows.length){
-        R.keyPoints.push(t('rtMerPoint1',{n:ltr(fmtNum(rows.length)), total:ltr(fmtNum(agg.total))}));
-        R.keyPoints.push(t('rtMerPoint2',{name:esc(rows[0].name), share:ltr(p1(rows[0].share)), top5:ltr(p1(top5Share))}));
+        R.keyPoints.push(t('rtMerPoint1',{n:ltr(fmtNum(rows.length)), total:ltr(fmtNum(agg.ships||0))}));
+        R.keyPoints.push(t('rtMerPoint2',{name:esc(rows[0].name), share:ltr(p1(rows[0].shipShare)), top5:ltr(p1(top5Share))}));
         R.keyPoints.push(t('rtMerPoint3',{n:ltr(fmtNum(attention.length)), min:ltr(MIN_C)}));
       }
       if(trend.available){
@@ -261,8 +261,10 @@ window.DashboardReportAnalyticData = (function(){
       if(attention.length) R.findings.push({ key:'merchants', label:t('rtFindMerchantsPoor'),
         detail: attention.slice(0,5).map(r=>`${r.name} (${r.rate.toFixed(1)}%)`).join(', ') });
       if(rows.length) R.findings.push({ key:'concentration', label:t('rtFindConcentration'),
-        detail: top5.map(r=>`${r.name} (${r.share.toFixed(1)}%)`).join(', ') });
+        detail: top5.map(r=>`${r.name} (${r.shipShare.toFixed(1)}%)`).join(', ') });
 
+      R.notes.push(t('rnMerBasisShips'));
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
       R.notes.push(t('rnMinMerchant',{n:MIN_C}));
       if(trend.available){
         R.notes.push(t('rnMerTrendMethod',{cur:trend.curLabel, prev:trend.prevLabel, min:trend.minPrev, drop:Math.round(trend.drop*100)}));
@@ -663,7 +665,7 @@ window.DashboardReportAnalyticData = (function(){
       return R;
     }
 
-    return { build };
+    return { build, clientTrend: buildClientTrend };
   }
 
   return { REPORT_TYPES, create };
