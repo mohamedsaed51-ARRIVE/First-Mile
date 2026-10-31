@@ -124,7 +124,7 @@ window.DashboardReportPreview = (function(){
       const top = (arr,k)=>arr.slice(0,k);
       const statusRows = perf.statuses.map(s=>`<tr><td>${esc(s.name)}</td><td class="num">${fmtNum(s.total)}</td><td class="num">${s.share.toFixed(1)}%</td></tr>`);
       const typeRows = perf.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}</td><td class="num">${fmtNum(tp.total)}</td><td class="num">${tp.share.toFixed(1)}%</td></tr>`);
-      const areaRows = top(perf.areas,10).map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
+      const areaRows = top(perf.areas,10).map(a=>`<tr><td>${esc(a.name)}<div class="rp-subcell">${esc(a.city)}</div></td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
       const driverRows = top(perf.drivers,10).map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td></tr>`);
       const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)} (${pctOf(c.done,c.total)})</td><td class="num">${fmtNum(c.fail)} (${pctOf(c.fail,c.total)})</td></tr>`);
 
@@ -133,7 +133,7 @@ window.DashboardReportPreview = (function(){
         <div class="report-grid-2 report-grid-flat">
           ${panel(t('reportStatusBreakdown'), table([t('statusLabel'),t('requestsHeader'),'%'], statusRows))}
           ${panel(t('reportTypeBreakdown'), `<div class="report-donut-block"><div class="chart-box report-donut" id="reportTypeChart"></div><div class="chart-legend" id="reportTypeChartLegend"></div></div>`+table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows))}
-          ${panel(t('reportAreaPerformance'), table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows))}
+          ${panel(t('reportAreaPerformance'), table([t('areaFilterLabel'),t('requestsHeader'),t('successHeader')], areaRows))}
           ${panel(t('reportDriverPerformance'), table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows))}
         </div>
           ${panel(t('reportCityPerformance'), `<div class="chart-box" id="reportCityChart"></div>
@@ -154,11 +154,9 @@ window.DashboardReportPreview = (function(){
         </div>
         ${perf.topFailureReasons.length ? `<div class="rp-alert">${esc(t('reportFailureConcentrationLine',{pct: perf.failureConcentrationPct.toFixed(1)+'%'}))}</div>` : ''}
         ${panel(t('rpFailReasonsTitle'), `<div class="chart-box" id="reportReasonChart"></div>`+table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows))}
-        <div class="report-grid-2 report-grid-flat">
           ${panel(t('rpFailTopBranches'), table([t('rpBranchHeader'),...base], failRows(failure.byBranch,false)))}
           ${panel(t('rpFailTopAreas'), table([t('areaFilterLabel'),t('cityLabel'),...base], failRows(failure.byArea,true)))}
           ${panel(t('rpFailTopDrivers'), table([t('driverFilterLabel'),...base], failRows(failure.byDriver,false)))}
-        </div>
       </section>`;
     }
 
