@@ -145,7 +145,40 @@ window.DashboardReportAnalyticData = (function(){
       R.notes.push(t('rnMinDriver',{n:MIN_D}));
       R.notes.push(t('rnBranchBlank'));
 
-      R.body = { rows, totals, top, bottom, bands, volumeTop: rows.slice(0,TOP_N), minVolume: MIN_D };
+
+      // تحليل البيك أب: السائق × العميل + تكلفة الشحنة (مرتب أساسي + عمولة ÷ عدد الشحنات)
+      const scopeMonths = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
+      const dm = new Map();
+      agg.fr.forEach(r=>{
+        const sh = r[10]||0; if(!sh) return;
+        let g = dm.get(r[3]);
+        if(!g){ g = { di:r[3], ships:0, clients:new Map(), areas:new Map(), months:new Set() }; dm.set(r[3], g); }
+        g.ships += sh; g.months.add(r[0]);
+        g.clients.set(r[6], (g.clients.get(r[6])||0)+sh);
+        g.areas.set(r[2], (g.areas.get(r[2])||0)+sh);
+      });
+      const pk = Array.from(dm.values()).map(g=>{
+        const name = drivers[g.di].trim();
+        const sl = salaryOf(name, scopeMonths, g.months);
+        const cost = sl.hasSalary ? sl.fixed+sl.extra : null;
+        const areaNames = Array.from(g.areas.entries()).sort((a,b)=>b[1]-a[1]).map(x=>areas[x[0]]);
+        const clientList = Array.from(g.clients.entries()).sort((a,b)=>b[1]-a[1]).map(x=>({ name:clients[x[0]], ships:x[1], share:pct(x[1], g.ships) }));
+        return { name, branch: branchOf(g.di), areas: areaNames, clients: clientList.length, clientList, ships:g.ships,
+          fixed: sl.hasSalary ? sl.fixed : null, extra: sl.hasSalary ? sl.extra : null, cost, hasSalary: sl.hasSalary,
+          perShip: (cost!=null && g.ships>0) ? cost/g.ships : null };
+      }).sort((a,b)=>b.ships-a.ships);
+      const costed = pk.filter(r=>r.hasSalary);
+      const pkTotals = { drivers:pk.length, ships: pk.reduce((x,r)=>x+r.ships,0),
+        fixed: costed.reduce((x,r)=>x+r.fixed,0), extra: costed.reduce((x,r)=>x+r.extra,0),
+        cost: costed.reduce((x,r)=>x+r.cost,0), shipsCosted: costed.reduce((x,r)=>x+r.ships,0), noSalary: pk.length-costed.length };
+      pkTotals.avg = pkTotals.shipsCosted>0 ? pkTotals.cost/pkTotals.shipsCosted : null;
+      if(pkTotals.avg!=null) R.kpis.push(kpi(t('rtKpiAvgCostShip'), money2(pkTotals.avg), 'main'));
+      if(pk.length){
+        R.notes.push(t('rnDrvCostMethod'));
+        if(pkTotals.noSalary) R.notes.push(t('rnDrvCostNoSalary',{n:pkTotals.noSalary}));
+      }
+      if(meta.hasShipments===false) R.notes.push(t('shipmentsColMissing'));
+      R.body = { rows, totals, top, bottom, bands, volumeTop: rows.slice(0,TOP_N), minVolume: MIN_D, pickups: pk, pkTotals };
       R.managementMessage = R.keyPoints;
       return R;
     }
@@ -413,6 +446,20 @@ window.DashboardReportAnalyticData = (function(){
     const money = n => fmtCurrency(n);
     const money2 = n => n==null ? null : fmtCurrency(Math.round(n*100)/100);
 
+    // مرتب سائق ضمن أشهر الفترة: يجمع الأساسي والعمولة لكل شهر (مطابقة برقم الشهر، أو صف بلا شهر). مشترك بين تقرير التكلفة وتقرير السائقين.
+    function salaryOf(name, scopeMonths, activeMonths){
+      const sal = salaryMap.get(normName(name));
+      let fixed = 0, extra = 0, salMonths = 0, missing = 0;
+      if(sal){
+        scopeMonths.forEach(mi=>{
+          const row = sal.get(monthNum(mi)) || sal.get(0);
+          if(row){ fixed += row.fixed; extra += row.extra; salMonths++; }
+          else if(activeMonths.has(mi)) missing++;
+        });
+      }
+      return { fixed, extra, salMonths, missing, hasSalary: salMonths>0 };
+    }
+
     function buildDriverCost(agg, state){
       const R = skeleton('driverCost', agg, state);
       const scopeMonths = Array.from(selectedMonthSet(state)).sort((a,b)=>a-b);
@@ -424,16 +471,8 @@ window.DashboardReportAnalyticData = (function(){
       });
       const rows = Array.from(m.values()).map(g=>{
         const name = drivers[g.di].trim();
-        const sal = salaryMap.get(normName(name));
-        // نجمع مرتب وعمولة كل شهر ضمن الفترة المختارة (مطابقة برقم الشهر)؛ صف بلا شهر يُحسب مرة لكل شهر نشاط
-        let fixed = 0, extra = 0, salMonths = 0, missing = 0;
-        if(sal){
-          scopeMonths.forEach(mi=>{
-            const row = sal.get(monthNum(mi)) || sal.get(0);
-            if(row){ fixed += row.fixed; extra += row.extra; salMonths++; }
-            else if(g.months.has(mi)) missing++;
-          });
-        }
+        const sl = salaryOf(name, scopeMonths, g.months);
+        const fixed = sl.fixed, extra = sl.extra, salMonths = sl.salMonths, missing = sl.missing;
         const hasSalary = salMonths>0;
         const cost = hasSalary ? fixed+extra : null;
         return { name, branch: branchOf(g.di), customers:g.clients.size, reqs:g.reqs, ships:g.ships,
