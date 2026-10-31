@@ -217,7 +217,9 @@ window.DashboardReport = (function(){
       const minVol = thresholds.minDriverVolume;
       const worst = groups.filter(g=>g.total>=minVol && g.fail>0)
         .sort((a,b)=>pct(b.fail,b.total)-pct(a.fail,a.total) || b.fail-a.fail).slice(0,10).map(enrich);
-      return { top, worst, minVol };
+      // الأقل شحنات: من لهم شحنة واحدة فأكثر (استبعاد من لا شحنات لهم حتى لا تمتلئ القائمة بأصفار)
+      const lowest = groups.filter(g=>g.ships>0).sort((a,b)=>a.ships-b.ships || a.total-b.total).slice(0,10).map(enrich);
+      return { top, worst, lowest, minVol };
     }
 
     // Management Attention: every item here is derived strictly from
@@ -304,6 +306,7 @@ window.DashboardReport = (function(){
       const performance = buildPerformance(agg);
       const failure = buildFailure(agg);
       const customers = buildCustomers(agg);
+      customers.trend = analytic.clientTrend(state);
       const attention = buildAttention(agg, performance);
       const insights = insightsEngine.computeInsightCards(agg.driverAgg, agg.areaAgg, agg.clientAgg, agg.reasonAgg, agg.cityAgg, agg.typeAgg, agg.branchAgg);
       const recommendations = insightsEngine.computeRecommendationItems(agg.driverAgg, agg.areaAgg, agg.cityAgg, agg.reasonAgg, agg.branchAgg);

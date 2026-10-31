@@ -152,14 +152,31 @@ window.DashboardReportPreview = (function(){
       </section>`;
     }
 
-    // تحليل العملاء: أكبر 10 بعدد الشحنات + أسوأ 10 بنسبة الفشل
+    // تحليل العملاء: أعلى/أقل 10 بعدد الشحنات + مقارنة المتوقفين والأقل (الشهر الحالي بالسابق) + أسوأ 10 بنسبة الفشل
     function renderCustomers(customers, n){
-      const topRows = customers.top.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td></tr>`);
-      const worstRows = customers.worst.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge rate-bad">${c.failRate.toFixed(1)}%</span></td></tr>`);
-      const head = [t('rpCustomerHeader'),t('rpCustReqsHeader'),t('rpCustReqsPct'),t('rpCustShipsHeader'),t('rpCustShipsPct')];
+      const row = c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td></tr>`;
+      const head = [t('rpCustomerHeader'),t('rpCustShipsHeader'),t('rpCustShipsPct'),t('rpCustReqsHeader'),t('rpCustReqsPct')];
+      const worstRows = customers.worst.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${c.shipShare.toFixed(1)}%</td><td class="num">${fmtNum(c.reqs)}</td><td class="num">${c.reqShare.toFixed(1)}%</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge rate-bad">${c.failRate.toFixed(1)}%</span></td></tr>`);
+      const tr = customers.trend;
+      let cmp = '';
+      if(tr && tr.available){
+        const hv = {cur:tr.curLabel, prev:tr.prevLabel}, N = 10;
+        const stopped = tr.stopped.slice(0,N).map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td></tr>`);
+        const low = tr.low.slice(0,N).map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td><td class="num">${fmtNum(r.cur)}</td><td class="num"><span class="ltr">${r.pct.toFixed(1)}%</span></td></tr>`);
+        const note = txt => `<div class="rp-foot-note">${esc(txt)}</div>`;
+        cmp = `<div class="rp-mini-title rp-kpis-title">${esc(t('rpCustCmpTitle',hv))}</div>`
+          + `<div class="report-kpis report-kpis-compact"><div class="report-kpi tone-bad"><div class="report-kpi-label">${esc(t('rtKpiStopped'))}</div><div class="report-kpi-value">${fmtNum(tr.stoppedCount)}</div><div class="report-kpi-sub">${esc(t('rpCustLostShips',{n:fmtNum(tr.stoppedLost)}))}</div></div><div class="report-kpi tone-bad"><div class="report-kpi-label">${esc(t('rtKpiLowPickup'))}</div><div class="report-kpi-value">${fmtNum(tr.lowCount)}</div><div class="report-kpi-sub">${esc(t('rpCustLostShips',{n:fmtNum(tr.lowLost)}))}</div></div></div>`
+          + panel(t('rbMerStopped',hv), (stopped.length ? table([t('rpCustomerHeader'), t('rtColPrevReqs',hv)], stopped) : `<div class="empty-state">${esc(t('rtMerNoStopped'))}</div>`) + note(tr.stoppedCount>N ? t('rtMerTrendMore',{n:N,c:fmtNum(tr.stoppedCount)}) : t('rbMerStoppedNote',{min:tr.minPrev})))
+          + panel(t('rbMerLow',hv), (low.length ? table([t('rpCustomerHeader'), t('rtColPrevReqs',hv), t('rtColCurReqs',hv), t('rtColChangePct')], low) : `<div class="empty-state">${esc(t('rtMerNoLow'))}</div>`) + note(tr.lowCount>N ? t('rtMerTrendMore',{n:N,c:fmtNum(tr.lowCount)}) : t('rbMerLowNote',{min:tr.minPrev,drop:Math.round(tr.drop*100)})))
+          + (tr.partialCur ? `<div class="rp-foot-note">${esc(t('rnMerTrendPartial',{cur:tr.curLabel}))}</div>` : '');
+      } else {
+        cmp = `<div class="rp-foot-note">${esc(t('rnMerNoPrev'))}</div>`;
+      }
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('rpSecCustomers'))}
-        ${panel(t('rpTopCustomers'), table(head, topRows))}
+        ${panel(t('rpTopCustomers'), table(head, customers.top.map(row)))}
+        ${panel(t('rpLowestCustomers'), table(head, customers.lowest.map(row)))}
+        ${cmp}
         <div class="panel rp-newpage"><div class="panel-head"><div class="panel-title">${esc(t('rpWorstCustomers'))}</div></div><div class="rp-foot-note">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</div>${table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows)}</div>
       </section>`;
     }
