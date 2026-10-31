@@ -119,33 +119,26 @@ window.DashboardReportPreview = (function(){
     const pctOf = (part, whole) => (whole ? part/whole*100 : 0).toFixed(1)+'%';
     const panel = (title, inner) => `<div class="panel"><div class="panel-head"><div class="panel-title">${esc(title)}</div></div>${inner}</div>`;
 
-    // تحليل الأداء بالترتيب: (1) حالة الطلبات + نوعها (2) المناطق + السائقين (3) المدن
+    // تحليل الأداء: حالة الطلبات + نوع الطلبات (جدولان فقط) ثم جدول المدن
     function renderPerformance(perf, summary, n){
-      const top = (arr,k)=>arr.slice(0,k);
       const statusRows = perf.statuses.map(s=>`<tr><td>${esc(s.name)}</td><td class="num">${fmtNum(s.total)}</td><td class="num">${s.share.toFixed(1)}%</td></tr>`);
       const typeRows = perf.requestTypes.map(tp=>`<tr><td>${esc(tp.name)}</td><td class="num">${fmtNum(tp.total)}</td><td class="num">${tp.share.toFixed(1)}%</td></tr>`);
-      const areaRows = top(perf.areas,10).map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
-      const driverRows = top(perf.drivers,10).map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td></tr>`);
       const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)} (${pctOf(c.done,c.total)})</td><td class="num">${fmtNum(c.fail)} (${pctOf(c.fail,c.total)})</td></tr>`);
 
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportPerformanceAnalysis'))}
         <div class="report-grid-2 report-grid-flat">
           ${panel(t('reportStatusBreakdown'), table([t('statusLabel'),t('requestsHeader'),'%'], statusRows))}
-          ${panel(t('reportTypeBreakdown'), `<div class="report-donut-block"><div class="chart-box report-donut" id="reportTypeChart"></div><div class="chart-legend" id="reportTypeChartLegend"></div></div>`+table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows))}
-          ${panel(t('reportAreaPerformance'), table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows))}
-          ${panel(t('reportDriverPerformance'), table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows))}
+          ${panel(t('reportTypeBreakdown'), table([t('requestTypeLabel'),t('requestsHeader'),'%'], typeRows))}
         </div>
-          ${panel(t('reportCityPerformance'), `<div class="chart-box" id="reportCityChart"></div>
-            <div class="chart-legend"><span><i style="background:${ArriveDS.color('done')}"></i><span>${esc(t('doneLegend'))}</span></span><span><i style="background:${ArriveDS.color('fail')}"></i><span>${esc(t('failLegend'))}</span></span></div>`
-            + table([t('cityLabel'),t('rpOrdersTotalHeader'),t('rpCitySuccessHeader'),t('rpCityFailHeader')], cityRows))}
+        ${panel(t('reportCityPerformance'), table([t('cityLabel'),t('rpOrdersTotalHeader'),t('rpCitySuccessHeader'),t('rpCityFailHeader')], cityRows))}
       </section>`;
     }
 
     // تحليل أسباب الفشل: نسبة الفشل من الإجمالي ← الأسباب ← أكثر الفروع/المناطق/المناديب فشلًا
     function renderFailureAnalysis(perf, summary, failure, n){
       const reasonRows = perf.reasons.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${r.share.toFixed(1)}%</td></tr>`);
-      const failRows = (rows, withCity) => rows.map(r=>`<tr><td>${esc(r.name)}</td>${withCity?`<td>${esc(r.city||'')}</td>`:''}<td class="num">${fmtNum(r.total)}</td><td class="num">${fmtNum(r.fail)}</td><td class="num">${r.failRate.toFixed(1)}%</td></tr>`);
+      const failRows = (rows) => rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${fmtNum(r.fail)}</td><td class="num">${r.failRate.toFixed(1)}%</td></tr>`);
       const base = [t('requestsHeader'),t('rpFailCountHeader'),t('rpFailRateHeader')];
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('reportFailureAnalysisTitle'))}
@@ -153,12 +146,9 @@ window.DashboardReportPreview = (function(){
           <div class="report-kpi tone-bad"><div class="report-kpi-label">${esc(t('rpFailShareLabel'))}</div><div class="report-kpi-value">${esc(failure.failShare.toFixed(1)+'%')}</div><div class="report-kpi-sub"><span class="ltr">${esc(summary.failedRequestsLabel)}</span> / <span class="ltr">${esc(summary.totalRequestsLabel)}</span></div></div>
         </div>
         ${perf.topFailureReasons.length ? `<div class="rp-alert">${esc(t('reportFailureConcentrationLine',{pct: perf.failureConcentrationPct.toFixed(1)+'%'}))}</div>` : ''}
-        ${panel(t('rpFailReasonsTitle'), `<div class="chart-box" id="reportReasonChart"></div>`+table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows))}
-        <div class="report-grid-2 report-grid-flat">
-          ${panel(t('rpFailTopBranches'), table([t('rpBranchHeader'),...base], failRows(failure.byBranch,false)))}
-          ${panel(t('rpFailTopAreas'), table([t('areaFilterLabel'),t('cityLabel'),...base], failRows(failure.byArea,true)))}
-          ${panel(t('rpFailTopDrivers'), table([t('driverFilterLabel'),...base], failRows(failure.byDriver,false)))}
-        </div>
+        ${panel(t('rpFailReasonsTitle'), table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows))}
+          ${panel(t('rpFailTopBranches'), table([t('rpBranchHeader'),...base], failRows(failure.byBranch)))}
+          ${panel(t('rpFailTopDrivers'), table([t('driverFilterLabel'),...base], failRows(failure.byDriver)))}
       </section>`;
     }
 
@@ -170,89 +160,7 @@ window.DashboardReportPreview = (function(){
       return `<section class="rp-section rp-break">
         ${sectionHeader(n, t('rpSecCustomers'))}
         ${panel(t('rpTopCustomers'), table(head, topRows))}
-        ${panel(t('rpWorstCustomers'), table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows))}
-        <p class="rp-lead">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</p>
-      </section>`;
-    }
-
-    // الملاحظات (FindingCard): الملاحظة ← الدليل ← الأثر ← المسؤول ← الموعد ← الحالة.
-    // الحقول التي لا يوفرها المصدر تُعرض «غير محدد بالمصدر» ولا تُنشأ حالة افتراضية.
-    // الخطورة «حرجة» تظهر فقط للمدن/المناطق/السائقين لأنها مشتقة من حد نسبة النجاح
-    // المعتمد أصلًا (أقل من 75%)، وليس لباقي الأنواع.
-    const RATE_KEYS = ['cities','areas','drivers'];
-    function renderFindings(items, n){
-      const field = (label, valueHtml) => `<div class="rp-fld"><span class="rp-fld-label">${esc(label)}</span><span class="rp-fld-value">${valueHtml}</span></div>`;
-      const body = items.length===0
-        ? `<div class="empty-state">${esc(t('reportNoAttentionItems'))}</div>`
-        : items.map((it,i)=>`<article class="rp-finding">
-            <header class="rp-finding-head"><span class="rp-finding-idx">${i+1}</span><h3 class="rp-finding-title">${esc(it.label)}</h3>${RATE_KEYS.includes(it.key)?`<span class="status-badge status-violation">${esc(t('sevCritical'))}</span>`:''}</header>
-            <div class="rp-finding-body">
-              ${field(t('fldEvidence'), esc(it.detail).replace(/(\([\d.,]+%\)|[\d.,]+%)/g,'<span class="ltr">$1</span>'))}
-              <div class="rp-fld-grid">
-                ${field(t('fldImpact'), NA())}
-                ${field(t('fldRoot'), NA())}
-                ${field(t('fldOwner'), NA())}
-                ${field(t('fldDue'), NA())}
-                ${field(t('fldStatus'), NA())}
-              </div>
-            </div>
-          </article>`).join('');
-      return `<section class="rp-section rp-break">
-        ${sectionHeader(n, t('reportSecFindings'))}
-        ${body}
-      </section>`;
-    }
-
-    function renderKeyInsights(insights, n){
-      const html = insights.length===0 ? `<div class="empty-state">${esc(t('emptyFilters'))}</div>`
-        : insights.map(c=>`<div class="insight-card"><div class="insight-tag">${esc(c.tag)}</div><div class="insight-main">${c.main}</div><div class="insight-sub">${esc(c.sub)}</div></div>`).join('');
-      return `<section class="rp-section">
-        ${sectionHeader(n, t('reportSecInsights'))}
-        <div class="insight-row report-insight-row">${html}</div>
-      </section>`;
-    }
-
-    // جدول التوصيات: المشكلة | التأثير | الإجراء المطلوب | المسؤول | الأولوية | الحالة
-    function renderRecommendations(recommendations, n){
-      const rows = recommendations.rows || [];
-      const body = rows.length===0
-        ? `<div class="empty-state">${esc(t('notEnoughRecs'))}</div>`
-        : `<table class="rp-rec-table"><thead><tr><th class="rp-c-idx">#</th><th>${esc(t('recColProblem'))}</th><th>${esc(t('recColImpact'))}</th><th>${esc(t('recColAction'))}</th><th>${esc(t('recColOwner'))}</th><th>${esc(t('recColPriority'))}</th><th>${esc(t('recColStatus'))}</th></tr></thead><tbody>${
-            rows.map((r,i)=>`<tr><td class="rp-c-idx">${i+1}</td><td class="rp-c-text">${r.problem}</td><td>${NA()}</td><td class="rp-c-text">${r.action?esc(r.action):NA()}</td><td>${NA()}</td><td>${NA()}</td><td>${NA()}</td></tr>`).join('')
-          }</tbody></table>`;
-      return `<section class="rp-section">
-        ${sectionHeader(n, t('reportSecRecs'))}
-        ${body}
-      </section>`;
-    }
-
-    function renderDetailedTables(perf, n){
-      const cityRows = perf.cities.map(c=>`<tr><td>${esc(c.name)}</td><td class="num">${fmtNum(c.total)}</td><td class="num">${fmtNum(c.done)}</td><td class="num">${fmtNum(c.fail)}</td><td class="num"><span class="rate-badge ${rateClass(c.successRate)}">${c.successRate.toFixed(1)}%</span></td></tr>`);
-      const areaRows = perf.areas.map(a=>`<tr><td>${esc(a.name)}</td><td>${esc(a.city)}</td><td class="num">${fmtNum(a.total)}</td><td class="num"><span class="rate-badge ${rateClass(a.successRate)}">${a.successRate.toFixed(1)}%</span></td></tr>`);
-      const driverRows = perf.drivers.map(d=>`<tr><td>${esc(d.name)}</td><td class="num">${fmtNum(d.total)}</td><td class="num"><span class="rate-badge ${rateClass(d.successRate)}">${d.successRate.toFixed(1)}%</span></td></tr>`);
-      const reasonRows = perf.reasons.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${r.share.toFixed(1)}%</td></tr>`);
-
-      return `<section class="rp-section rp-break">
-        ${sectionHeader(n, t('reportSecAppendix'))}
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportCityPerformance'))}</div></div>${table([t('cityLabel'),t('requestsHeader'),t('doneLegend'),t('failLegend'),t('successHeader')], cityRows)}</div>
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportAreaPerformance'))}</div></div>${table([t('areaFilterLabel'),t('cityLabel'),t('requestsHeader'),t('successHeader')], areaRows)}</div>
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportDriverPerformance'))}</div></div>${table([t('driverFilterLabel'),t('requestsHeader'),t('successHeader')], driverRows)}</div>
-        <div class="panel"><div class="panel-head"><div class="panel-title">${esc(t('reportReasonBreakdown'))}</div></div>${table([t('reasonFilterLabel'),t('requestsHeader'),'%'], reasonRows)}</div>
-      </section>`;
-    }
-
-    // صفحة الخاتمة
-    function renderClosing(data, n){
-      const sign = label => `<div class="rp-sign"><div class="rp-sign-line"></div><div class="rp-sign-label">${esc(label)}</div></div>`;
-      return `<section class="rp-section rp-break rp-closing">
-        ${sectionHeader(n, t('reportSecClosing'))}
-        <p class="rp-lead">${esc(t('reportClosingLead'))}</p>
-        <div class="rp-alert rp-alert-info">${esc(data.type && data.type!=='management' ? t('rtClosingTodo') : t('reportClosingTodo'))}</div>
-        <div class="rp-signs">${sign(t('reportSignPrepared'))}${sign(t('reportSignReviewed'))}${sign(t('reportSignApproved'))}</div>
-        <div class="rp-closing-foot">
-          <div>${esc(t('reportDataSources'))}</div>
-          <div>${esc(t('reportCoverBrand'))} · ${ltr(fmtStamp(data.generatedAt))}</div>
-        </div>
+        <div class="panel rp-newpage"><div class="panel-head"><div class="panel-title">${esc(t('rpWorstCustomers'))}</div></div><div class="rp-foot-note">${esc(t('rpWorstCustomersNote',{n: customers.minVol}))}</div>${table([...head,t('rpFailCountHeader'),t('rpFailRateHeader')], worstRows)}</div>
       </section>`;
     }
 
@@ -325,22 +233,6 @@ window.DashboardReportPreview = (function(){
           [ArriveDS.color('done'), ArriveDS.color('fail')]);
       }
 
-      // Performance Analysis: City done/fail stacked bar (top 8 by volume)
-      if(document.getElementById('reportCityChart')){
-        const topCities = data.performance.cities.slice(0,8);
-        charts.renderHStackedBar('reportCityChart', topCities.map(c=>c.name), topCities.map(c=>c.done), topCities.map(c=>c.fail));
-      }
-      // Request Type donut
-      if(document.getElementById('reportTypeChart')){
-        const types = data.performance.requestTypes;
-        charts.renderDonut('reportTypeChart', 'reportTypeChartLegend', types.map(tp=>tp.name), types.map(tp=>tp.total), TYPE_COLORS);
-      }
-      // Failure reasons — top 8 by volume
-      if(document.getElementById('reportReasonChart')){
-        const topReasons = data.performance.reasons.slice(0,8);
-        charts.renderHBar('reportReasonChart', topReasons.map(r=>r.name), topReasons.map(r=>r.total), ArriveDS.color('fail'));
-      }
-
       // Comparison (only present when Comparison Mode is on)
       if(data.comparison){
         if(document.getElementById('reportCmpKpiChart')){
@@ -385,12 +277,7 @@ window.DashboardReportPreview = (function(){
         renderPerformance(data.performance, data.summary, next()),
         renderFailureAnalysis(data.performance, data.summary, data.failure, next()),
         renderCustomers(data.customers, next()),
-        data.comparison ? renderComparisonSection(data.comparison, next()) : '',
-        renderFindings(data.attention, next()),
-        renderKeyInsights(data.insights, next()),
-        renderRecommendations(data.recommendations, next()),
-        renderDetailedTables(data.performance, next()),
-        renderClosing(data, next())
+        data.comparison ? renderComparisonSection(data.comparison, next()) : ''
       ].join('');
     }
 

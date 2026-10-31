@@ -83,11 +83,11 @@ window.DashboardReportAnalytic = (function(){
       if(pk.length){
         const tt = b.pkTotals;
         const money = v => v==null ? NA() : fmtCurrency(v);
-        const areasTxt = a => a.length>3 ? a.slice(0,3).join('، ')+' +'+(a.length-3) : a.join('، ');
+        const areasTxt = a => a.length>2 ? a.slice(0,2).join('، ')+' +'+(a.length-2) : a.join('، ');
         const rows = pk.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td><td class="rp-c-text">${esc(areasTxt(r.areas))}</td><td class="num">${fmtNum(r.clients)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${money(r.fixed)}</td><td class="num">${money(r.extra)}</td><td class="num">${money(r.cost)}</td><td class="num">${r.perShip==null?NA():fmtCurrency(Math.round(r.perShip*100)/100)}</td></tr>`);
         const foot = `<tr><td colspan="5">${esc(t('rtTotalWord'))}</td><td class="num">${fmtNum(tt.ships)}</td><td class="num">${fmtCurrency(tt.fixed)}</td><td class="num">${fmtCurrency(tt.extra)}</td><td class="num">${fmtCurrency(tt.cost)}</td><td class="num">${tt.avg==null?'—':fmtCurrency(Math.round(tt.avg*100)/100)}</td></tr>`;
         html += panel(t('rbDrvCostTitle'), tbl(['#', t('driverFilterLabel'), t('rpBranchHeader'), t('rbColAreas'), t('rbColClients'), t('rbColPickups'), t('rbColBasic'), t('rbColCommission'), t('rbColTotalSalary'), t('rbColAvgShip')], rows, foot), t('rbDrvCostNote'));
-        const DET = 10, CAP = 30;
+        const DET = 10, CAP = 15;
         const detail = r => {
           const shown = r.clientList.slice(0,CAP), rest = r.clientList.slice(CAP);
           const body = shown.map((c,i)=>`<tr><td>${i+1}</td><td>${esc(c.name)}</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${p1(c.share)}</td></tr>`);
@@ -109,7 +109,8 @@ window.DashboardReportAnalytic = (function(){
             b.attention.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${rateCell(r.rate)}</td></tr>`))
         : empty(t('rtMerNoAttention',{n:b.minVolume}));
       const attnNote = b.attentionCount>LIST_N ? t('rtMerAttentionMore',{n:LIST_N, c:fmtNum(b.attentionCount)}) : t('rbMinNote',{n:b.minVolume});
-      let html = grid(panel(t('rbMerTop'), top), panel(t('rbMerAttn'), attn, attnNote));
+      // جدول أعلى العملاء بستة أعمدة: بعرض كامل، ثم قائمة الانتباه تحته
+      let html = panel(t('rbMerTop'), top) + panel(t('rbMerAttn'), attn, attnNote);
       const tr = b.trend;
       if(tr && tr.available){
         const N = 10, hv = {cur:tr.curLabel, prev:tr.prevLabel};
@@ -168,7 +169,7 @@ window.DashboardReportAnalytic = (function(){
       const body = b.rows.map(r=>`<tr><td>${r.rank}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.ships)}</td>
         <td class="num">${cur(r.cost)}</td><td class="num"><b>${cur2(r.perShip)}</b></td></tr>`);
       const foot = `<tr><td></td><td>${esc(t('rtTotal'))} (${fmtNum(T.customers)})</td><td class="num">${fmtNum(T.reqs)}</td><td class="num">${fmtNum(T.ships)}</td><td class="num">${cur(T.cost)}</td><td class="num">${cur2(T.avg)}</td></tr>`;
-      return panel(t('rbExTable'), tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'), 'rp-flow');
+      return panel(t('rbExTable'), tbl(['#', t('rtColClient'), t('requestsHeader'), t('rtColShipments'), t('rtColExtCost'), t('rtColCostPerShip')], body, foot), t('rnExMethod'), 'rp-flow');
     }
     function status(data){
       const b = data.body;
@@ -185,16 +186,17 @@ window.DashboardReportAnalytic = (function(){
     }
     function clientQuality(data){
       const b = data.body;
-      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('doneLegend'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
+      const list = (arr, emptyKey) => arr.length ? tbl(['#', t('rtColClient'), t('requestsHeader'), t('doneLegend'), t('rtColFailRate'), t('rtColShipments'), t('rtCqColPerReq'), t('rtCqColVsAvg')],
         arr.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.reqs)}</td><td class="num">${fmtNum(r.done)}</td><td class="num">${p1(r.failRate)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num"><b>${r.perReq.toFixed(1)}</b></td><td class="num">×${r.ratio.toFixed(2)}</td></tr>`)) : empty(t(emptyKey,{n:b.minReqs}));
       const dist = tbl([t('rtCqColClass'), t('rtColCustomers'), t('requestsHeader'), t('rtColShipments')], [
         `<tr><td>${esc(t('cqGood'))}</td><td class="num">${fmtNum(b.goodCount)}</td><td class="num">${fmtNum(b.goodReqs)}</td><td class="num">${fmtNum(b.goodShips)}</td></tr>`,
         `<tr><td>${esc(t('cqMid'))}</td><td class="num">${fmtNum(b.midCount)}</td><td class="num">—</td><td class="num">—</td></tr>`,
         `<tr><td>${esc(t('cqLow'))}</td><td class="num">${fmtNum(b.lowCount)}</td><td class="num">${fmtNum(b.lowReqs)}</td><td class="num">${fmtNum(b.lowShips)}</td></tr>`,
         `<tr class="rp-row-muted"><td>${esc(t('cqNa'))}</td><td class="num">${fmtNum(b.naCount)}</td><td class="num">—</td><td class="num">—</td></tr>`]);
+      // الجدولان بثمانية أعمدة: يُعرضان فوق بعض (وليس متجاورين) حتى لا يتجاوز عرضهما إطار التقرير
       return panel(t('rbCqDist'), dist)
-        + grid(panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : ''),
-               panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : ''));
+        + panel(t('rbCqGood'), list(b.good,'rtCqNoGood'), b.goodCount>b.good.length ? t('rtCqMore',{n:b.good.length, c:fmtNum(b.goodCount)}) : '')
+        + panel(t('rbCqLow'), list(b.low,'rtCqNoLow'), b.lowCount>b.low.length ? t('rtCqMore',{n:b.low.length, c:fmtNum(b.lowCount)}) : '');
     }
     const BODY = { drivers, merchants, reasons, fees, branches, driverCost, external, status, clientQuality };
 
