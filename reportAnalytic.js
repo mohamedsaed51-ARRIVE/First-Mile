@@ -78,18 +78,54 @@ window.DashboardReportAnalytic = (function(){
       const b = data.body;
       const list = arr => tbl(['#', t('driverFilterLabel'), t('requestsHeader'), t('successHeader')],
         arr.slice(0,LIST_N).map((d,i)=>`<tr><td>${i+1}</td><td>${esc(d.name)}</td><td class="num">${fmtNum(d.count)}</td><td class="num">${rateCell(d.rate)}</td></tr>`));
-      return grid(panel(t('rbDrvTop'), list(b.top), t('rbMinNote',{n:b.minVolume})), panel(t('rbDrvBottom'), list(b.bottom), t('rbMinNote',{n:b.minVolume})));
+      let html = grid(panel(t('rbDrvTop'), list(b.top), t('rbMinNote',{n:b.minVolume})), panel(t('rbDrvBottom'), list(b.bottom), t('rbMinNote',{n:b.minVolume})));
+      const pk = b.pickups || [];
+      if(pk.length){
+        const tt = b.pkTotals;
+        const money = v => v==null ? NA() : fmtCurrency(v);
+        const areasTxt = a => a.length>3 ? a.slice(0,3).join('، ')+' +'+(a.length-3) : a.join('، ');
+        const rows = pk.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td>${r.branch?esc(r.branch):NA()}</td><td class="rp-c-text">${esc(areasTxt(r.areas))}</td><td class="num">${fmtNum(r.clients)}</td><td class="num">${fmtNum(r.ships)}</td><td class="num">${money(r.fixed)}</td><td class="num">${money(r.extra)}</td><td class="num">${money(r.cost)}</td><td class="num">${r.perShip==null?NA():fmtCurrency(Math.round(r.perShip*100)/100)}</td></tr>`);
+        const foot = `<tr><td colspan="5">${esc(t('rtTotalWord'))}</td><td class="num">${fmtNum(tt.ships)}</td><td class="num">${fmtCurrency(tt.fixed)}</td><td class="num">${fmtCurrency(tt.extra)}</td><td class="num">${fmtCurrency(tt.cost)}</td><td class="num">${tt.avg==null?'—':fmtCurrency(Math.round(tt.avg*100)/100)}</td></tr>`;
+        html += panel(t('rbDrvCostTitle'), tbl(['#', t('driverFilterLabel'), t('rpBranchHeader'), t('rbColAreas'), t('rbColClients'), t('rbColPickups'), t('rbColBasic'), t('rbColCommission'), t('rbColTotalSalary'), t('rbColAvgShip')], rows, foot), t('rbDrvCostNote'));
+        const DET = 10, CAP = 30;
+        const detail = r => {
+          const shown = r.clientList.slice(0,CAP), rest = r.clientList.slice(CAP);
+          const body = shown.map((c,i)=>`<tr><td>${i+1}</td><td>${esc(c.name)}</td><td class="num">${fmtNum(c.ships)}</td><td class="num">${p1(c.share)}</td></tr>`);
+          if(rest.length) body.push(`<tr><td></td><td>${esc(t('rbMoreClients',{n:rest.length}))}</td><td class="num">${fmtNum(rest.reduce((x,c)=>x+c.ships,0))}</td><td class="num">${p1(rest.reduce((x,c)=>x+c.share,0))}</td></tr>`);
+          return panel(t('rbDrvClientsTitle',{name:r.name, n:fmtNum(r.ships)}), tbl(['#', t('rtColClient'), t('rbColPickups'), t('rtColShare')], body));
+        };
+        const top = pk.slice(0,DET);
+        for(let i=0;i<top.length;i+=2) html += grid(detail(top[i]), top[i+1] ? detail(top[i+1]) : '<div></div>');
+        if(pk.length>DET) html += `<div class="rp-foot-note">${esc(t('rbDrvClientsMore',{n:DET, c:pk.length}))}</div>`;
+      }
+      return html;
     }
     function merchants(data){
       const b = data.body;
-      const top = tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('rtColShare'), t('successHeader')],
-        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
+      const top = tbl(['#', t('rtColClient'), t('requestsHeader'), t('rtColShare'), t('rtColShips'), t('successHeader')],
+        b.top.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${p1(r.share)}</td><td class="num">${fmtNum(r.ships||0)}</td><td class="num">${rateCell(r.rate)}</td></tr>`));
       const attn = b.attention.length
-        ? tbl(['#', t('merchantFilterLabel'), t('requestsHeader'), t('successHeader')],
+        ? tbl(['#', t('rtColClient'), t('requestsHeader'), t('successHeader')],
             b.attention.slice(0,LIST_N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.total)}</td><td class="num">${rateCell(r.rate)}</td></tr>`))
         : empty(t('rtMerNoAttention',{n:b.minVolume}));
       const attnNote = b.attentionCount>LIST_N ? t('rtMerAttentionMore',{n:LIST_N, c:fmtNum(b.attentionCount)}) : t('rbMinNote',{n:b.minVolume});
-      return grid(panel(t('rbMerTop'), top), panel(t('rbMerAttn'), attn, attnNote));
+      let html = grid(panel(t('rbMerTop'), top), panel(t('rbMerAttn'), attn, attnNote));
+      const tr = b.trend;
+      if(tr && tr.available){
+        const N = 10, hv = {cur:tr.curLabel, prev:tr.prevLabel};
+        const stopped = tr.stopped.length
+          ? tbl(['#', t('rtColClient'), t('rtColPrevReqs',hv)],
+              tr.stopped.slice(0,N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td></tr>`))
+          : empty(t('rtMerNoStopped'));
+        const low = tr.low.length
+          ? tbl(['#', t('rtColClient'), t('rtColPrevReqs',hv), t('rtColCurReqs',hv), t('rtColChangePct')],
+              tr.low.slice(0,N).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="num">${fmtNum(r.prev)}</td><td class="num">${fmtNum(r.cur)}</td><td class="num"><span class="ltr">${r.pct.toFixed(1)}%</span></td></tr>`))
+          : empty(t('rtMerNoLow'));
+        const more = (cnt) => cnt>N ? t('rtMerTrendMore',{n:N, c:fmtNum(cnt)}) : '';
+        html += grid(panel(t('rbMerStopped',hv), stopped, more(tr.stoppedCount)||t('rbMerStoppedNote',{min:tr.minPrev})),
+                     panel(t('rbMerLow',hv), low, more(tr.lowCount)||t('rbMerLowNote',{min:tr.minPrev, drop:Math.round(tr.drop*100)})));
+      }
+      return html;
     }
     function reasons(data){
       const b = data.body;

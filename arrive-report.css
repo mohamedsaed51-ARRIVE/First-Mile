@@ -352,3 +352,9 @@ tr.rp-row-muted td{color:var(--text-secondary); background:var(--gray-50);}
   .rp-closing .rp-signs{margin:8mm 0 4mm;}
 }
 .rp-brief .rp-kpis-title{margin:0 0 calc(-1 * var(--space-2));}
+
+/* ---- تقرير الإدارة المعاد ترتيبه ---- */
+.report-kpis.report-kpis-2{grid-template-columns:repeat(2,1fr) !important;}
+.report-kpi-sub{margin-top:4px; font-size:var(--fs-caption); color:var(--text-secondary); font-weight:var(--fw-semibold);}
+.report-grid-flat > .panel:first-child{grid-column:auto !important;}
+.report-grid-flat{margin-bottom:var(--space-4);}
