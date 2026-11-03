@@ -177,7 +177,7 @@ function doGet(e) {
 
     const bypassCache = params.refresh === '1';
     const cache = CacheService.getScriptCache();
-    const cacheKey = 'first_mile_dashboard_payload_v3';
+    const cacheKey = 'first_mile_dashboard_payload_v4';
 
     if (!bypassCache) {
       const cached = safeCacheGet(cache, cacheKey);
@@ -473,6 +473,7 @@ function buildPayload() {
     reasons: pickupResult.reasons,
     rows: pickupResult.rows,
     pickupDays: pickupResult.pickupDays,
+    pickupSummary: pickupResult.pickupSummary,
     driverBranch: branchInfo.driverBranch,
     salaryRef: salaryRef,
     meta: meta
@@ -493,6 +494,7 @@ function readPickupRequest() {
   const monthsSet = {}, citiesSet = {}, areasSet = {}, driversSet = {}, clientsSet = {}, typesSet = {}, statusesSet = {}, reasonsSet = {};
   const groups = {}; // composite-key -> {m,c,a,d,t,s,cl,r,count,fees}
   const pickupDaysRaw = []; // Phase 6A: one un-aggregated entry per valid Pickup-type row (date kept, never merged)
+  const summaryGroups = {}; // لوحة الإدارة: تجميع يومي حسب الحالة/السبب/المدينة/النوع مع الشحنات الخام (بغض النظر عن الحالة)
 
   let totalRecords = 0, processedRows = 0, skippedRows = 0;
   const skippedRowReasons = {}; // reason label -> count, for diagnostics
@@ -559,6 +561,17 @@ function readPickupRequest() {
     const dStr = fmtDate(dateObj);
     if (dStr) { if (!dateMin || dStr < dateMin) dateMin = dStr; if (!dateMax || dStr > dateMax) dateMax = dStr; }
 
+    // ---- لوحة الإدارة (additive): عدد الطلبات والشحنات الخام لكل حالة ----
+    // `ships` أعلاه يُحتسب لحالة Done فقط (قاعدة قديمة لا تُمَس). هنا نقرأ عمود
+    // "Pickup" كما هو لكل الحالات حتى تظهر شحنات المُرحَّل والفاشل أيضًا.
+    if (dStr) {
+      const rawShips = hasShipments ? (Number(row[col.shipments]) || 0) : 0;
+      const sk = [dStr, city, type, status, reason].join('|');
+      if (!summaryGroups[sk]) summaryGroups[sk] = { d: dStr, c: city, t: type, s: status, r: reason, count: 0, raw: 0 };
+      summaryGroups[sk].count += 1;
+      summaryGroups[sk].raw += rawShips;
+    }
+
     // ---- Phase 6A: pickupDays (additive only — does not touch `groups`/`rows`) ----
     // Matched case-insensitively ('Pickup', 'pickup', 'PICKUP', ' Pickup ' all match)
     // so the same row that is already grouped into `rows` above is also, when it is
@@ -607,8 +620,16 @@ function readPickupRequest() {
     ];
   });
 
+  // ---- لوحة الإدارة: pickupSummary ----
+  // Shape per entry: [date "YYYY-MM-DD", cityIdx, typeIdx, statusIdx, reasonIdx, requests, rawShipments]
+  // نفس القواميس (cities/types/statuses/reasons) المستخدمة في rows. إضافة فقط.
+  const pickupSummary = Object.keys(summaryGroups).map(function (k) {
+    const g = summaryGroups[k];
+    return [g.d, cIdx[g.c], tIdx[g.t], sIdx[g.s], rIdx[g.r], g.count, g.raw];
+  });
+
   return {
-    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays,
+    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays, pickupSummary,
     totalRecords, processedRows, skippedRows, skippedRowReasons,
     hasShipments, totalShipments,
     dateMin, dateMax, recordedYes, recordedNo,
