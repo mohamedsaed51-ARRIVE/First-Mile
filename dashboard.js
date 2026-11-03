@@ -139,10 +139,14 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // Phase 6A (additive): pickupDays is optional — defaults to [] so an
     // older/cached API response with no pickupDays field never breaks
     // dashboard load. rows/months/.../meta destructuring is unchanged.
-    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], driverBranch, salaryRef, meta } = DATA;
+    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], secondStatuses = [], finalStatuses = [], driverBranch, salaryRef, meta } = DATA;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
     const TYPE_COLORS = ArriveDS.typeColors();
+    // الحالة الثانية (عمود I): تصنيف بالنص (غير حساس لحالة الأحرف/المسافات).
+    const SAME_DAY_RE = /same\s*-?\s*day|نفس\s*اليوم/i, IN_PROGRESS_RE = /in\s*-?\s*progress|قيد\s*التنفيذ/i;
+    const SAME_DAY_IDX = new Set(secondStatuses.map((v,i)=>SAME_DAY_RE.test(v)?i:-1).filter(i=>i>=0));
+    const IN_PROGRESS_IDX = new Set(secondStatuses.map((v,i)=>IN_PROGRESS_RE.test(v)?i:-1).filter(i=>i>=0));
 
     // PHASE 1: the canonical filtering engine — see filters.js. Built once
     // per dataset load; every filter-affecting function below reads
@@ -219,8 +223,15 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       drivers:'<circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 20c0-3.6 2.8-6 5.5-6s5.5 2.4 5.5 6M13 20c.2-2.7 1.7-5 4.5-5 2.4 0 4.5 1.7 5 4.2"/>',
       cities:'<path d="M4 21V9l7-5 7 5v12M9 21v-6h4v6M4 21h16"/>', avgpd:'<path d="M4 19V5m4 14V9m4 10V13m4 6V7m4 12V11"/>',
       ships:'<path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/>',
+      sameday:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      inprogress:'<path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5"/>',
       compliance:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>'
     };
+    function inProgFootHtml(byFinal){
+      const parts = Object.keys(byFinal).sort((a,b)=>byFinal[b]-byFinal[a])
+        .map(k=>`${esc(k||t('finalStatusNone'))}: <b>${fmtNum(byFinal[k])}</b>`);
+      return parts.length ? parts.join(' · ') : '—';
+    }
     function icon(name, color){ return `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
     // PHASE 0A: extracted to formatters.js (createFormatters reads
     // appState.lang live, so behavior on language toggle is unchanged).
@@ -294,9 +305,12 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const driverAgg = {}, areaAgg = {}, clientAgg = {}, reasonAgg = {}, cityAgg = {}, typeAgg = {}, branchAgg = {};
       const driverSet = new Set(), citySet = new Set();
       const branchShips = {};
-      let total=0, done=0, fail=0, fees=0, ships=0;
+      let total=0, done=0, fail=0, fees=0, ships=0, sameDay=0, inProg=0;
+      const inProgFinal = {};   // الحالة النهائية (عمود J) لطلبات In Progress فقط
       fr.forEach(r=>{
-        const [,ci,ai,di,ti,si,cli,ri,count,f,sh0] = r;
+        const [,ci,ai,di,ti,si,cli,ri,count,f,sh0,sec,fin] = r;
+        if(SAME_DAY_IDX.has(sec)) sameDay+=count;
+        if(IN_PROGRESS_IDX.has(sec)){ inProg+=count; const fl=finalStatuses[fin]||''; inProgFinal[fl]=(inProgFinal[fl]||0)+count; }
         const sh = sh0||0;   // عدد الشحنات (rows[10]) — صفر لو الـ API قديم
         total+=count; fees+=f; ships+=sh; if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count;
         driverSet.add(di); citySet.add(ci);
@@ -318,7 +332,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         const brKey = br || t('rtBranchUnmapped');
         branchShips[brKey]=(branchShips[brKey]||0)+sh;
       });
-      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, branchShips, total, done, fail, fees, ships, driverSet, citySet };
+      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, branchShips, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, driverSet, citySet };
     }
 
     function computeAggregates(){
@@ -332,7 +346,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       filterUI.renderActiveChips();
 
       const agg = computeAggregates();
-      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, ships, driverSet, citySet } = agg;
+      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, driverSet, citySet } = agg;
 
       document.getElementById('filteredRecordCount').innerHTML =
         `${t('filteredRecordsLabel')}: <b>${fmtNum(total)}</b> ${t('ofTotalLabel',{n:fmtNum(meta.totalRecords)})}`;
@@ -359,6 +373,9 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         {label:t('kpiTotalRequests'), icon:'total', value:fmtNum(total), foot:trendHtml(total, prevAgg?prevAgg.total:null, true)},
         {label:t('kpiTotalShipments'), icon:'ships', value:fmtNum(ships), foot: meta.hasShipments===false ? t('shipmentsColMissingShort') : trendHtml(ships, prevAgg?prevAgg.ships:null, true)},
         {label:t('kpiCompleted'), icon:'done', value:fmtNum(done), foot:`${total?(done/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
+        // الحالة الثانية (عمود I): نفس اليوم / In Progress. داخل In Progress: توزيع الحالة النهائية (عمود J).
+        {label:t('kpiSameDay'), icon:'sameday', value:fmtNum(sameDay), foot:`${total?(sameDay/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
+        {label:t('kpiInProgress'), icon:'inprogress', value:fmtNum(inProg), foot:inProgFootHtml(inProgFinal)},
         {label:t('kpiFailed'), icon:'fail', value:fmtNum(fail), foot:`${total?(fail/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiSuccessRate'), icon:'rate', value:successRate.toFixed(1)+'%', foot:trendHtml(successRate, prevSuccessRate, true)},
         {label:t('kpiExtraFees'), icon:'fees', value:fmtCurrency(fees), foot:trendHtml(fees, prevAgg?prevAgg.fees:null, true)},
