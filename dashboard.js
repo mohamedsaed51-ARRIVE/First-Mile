@@ -219,6 +219,8 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       drivers:'<circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 20c0-3.6 2.8-6 5.5-6s5.5 2.4 5.5 6M13 20c.2-2.7 1.7-5 4.5-5 2.4 0 4.5 1.7 5 4.2"/>',
       cities:'<path d="M4 21V9l7-5 7 5v12M9 21v-6h4v6M4 21h16"/>', avgpd:'<path d="M4 19V5m4 14V9m4 10V13m4 6V7m4 12V11"/>',
       ships:'<path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/>',
+      sameday:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      inprogress:'<path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5"/>',
       compliance:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>'
     };
     function icon(name, color){ return `<svg viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
@@ -359,6 +361,9 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         {label:t('kpiTotalRequests'), icon:'total', value:fmtNum(total), foot:trendHtml(total, prevAgg?prevAgg.total:null, true)},
         {label:t('kpiTotalShipments'), icon:'ships', value:fmtNum(ships), foot: meta.hasShipments===false ? t('shipmentsColMissingShort') : trendHtml(ships, prevAgg?prevAgg.ships:null, true)},
         {label:t('kpiCompleted'), icon:'done', value:fmtNum(done), foot:`${total?(done/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
+        // كارتان فارغان مؤقتاً — مصدر البيانات يُحدَّد لاحقاً
+        {label:t('kpiSameDay'), icon:'sameday', value:'—', foot:''},
+        {label:t('kpiInProgress'), icon:'inprogress', value:'—', foot:''},
         {label:t('kpiFailed'), icon:'fail', value:fmtNum(fail), foot:`${total?(fail/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiSuccessRate'), icon:'rate', value:successRate.toFixed(1)+'%', foot:trendHtml(successRate, prevSuccessRate, true)},
         {label:t('kpiExtraFees'), icon:'fees', value:fmtCurrency(fees), foot:trendHtml(fees, prevAgg?prevAgg.fees:null, true)},
