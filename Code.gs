@@ -183,7 +183,7 @@ function doGet(e) {
 
     const bypassCache = params.refresh === '1';
     const cache = CacheService.getScriptCache();
-    const cacheKey = 'first_mile_dashboard_payload_v4';
+    const cacheKey = 'first_mile_dashboard_payload_v8';
 
     if (!bypassCache) {
       const cached = safeCacheGet(cache, cacheKey);
@@ -479,6 +479,8 @@ function buildPayload() {
     reasons: pickupResult.reasons,
     rows: pickupResult.rows,
     pickupDays: pickupResult.pickupDays,
+    pickupSummary: pickupResult.pickupSummary,
+    statusDetail: pickupResult.statusDetail,
     secondStatuses: pickupResult.secondStatuses,
     finalStatuses: pickupResult.finalStatuses,
     pendingReasons: pickupResult.pendingReasons,
@@ -502,6 +504,8 @@ function readPickupRequest() {
   const monthsSet = {}, citiesSet = {}, areasSet = {}, driversSet = {}, clientsSet = {}, typesSet = {}, statusesSet = {}, reasonsSet = {}, secondSet = {}, finalSet = {}, pendReasonSet = {};
   const groups = {}; // composite-key -> {m,c,a,d,t,s,cl,r,count,fees}
   const pickupDaysRaw = []; // Phase 6A: one un-aggregated entry per valid Pickup-type row (date kept, never merged)
+  const failGroups = {}; // لوحة الإدارة: تفصيل الطلبات غير المكتملة (Fail / In progress / أي حالة غير Done) حسب يوم/عميل/سبب/مدينة/حالة
+  const summaryGroups = {}; // لوحة الإدارة: تجميع يومي حسب الحالة/السبب/المدينة/النوع مع الشحنات الخام (بغض النظر عن الحالة)
 
   let totalRecords = 0, processedRows = 0, skippedRows = 0;
   const skippedRowReasons = {}; // reason label -> count, for diagnostics
@@ -573,6 +577,23 @@ function readPickupRequest() {
     const dStr = fmtDate(dateObj);
     if (dStr) { if (!dateMin || dStr < dateMin) dateMin = dStr; if (!dateMax || dStr > dateMax) dateMax = dStr; }
 
+    // ---- لوحة الإدارة (additive): عدد الطلبات والشحنات الخام لكل حالة ----
+    // `ships` أعلاه يُحتسب لحالة Done فقط (قاعدة قديمة لا تُمَس). هنا نقرأ عمود
+    // "Pickup" كما هو لكل الحالات حتى تظهر شحنات المُرحَّل والفاشل أيضًا.
+    if (dStr) {
+      const rawShips = hasShipments ? (Number(row[col.shipments]) || 0) : 0;
+      const sk = [dStr, city, type, status, reason, second, finalSt].join('|');
+      if (!summaryGroups[sk]) summaryGroups[sk] = { d: dStr, c: city, t: type, s: status, r: reason, sec: second, fin: finalSt, count: 0, raw: 0 };
+      summaryGroups[sk].count += 1;
+      summaryGroups[sk].raw += rawShips;
+      if (status !== 'Done' || second !== '') {
+        const fk = [dStr, client, reason, city, status, second, finalSt].join('|');
+        if (!failGroups[fk]) failGroups[fk] = { d: dStr, cl: client, r: reason, c: city, s: status, sec: second, fin: finalSt, count: 0, raw: 0 };
+        failGroups[fk].count += 1;
+        failGroups[fk].raw += rawShips;
+      }
+    }
+
     // ---- Phase 6A: pickupDays (additive only — does not touch `groups`/`rows`) ----
     // Matched case-insensitively ('Pickup', 'pickup', 'PICKUP', ' Pickup ' all match)
     // so the same row that is already grouped into `rows` above is also, when it is
@@ -629,8 +650,22 @@ function readPickupRequest() {
     ];
   });
 
+  // ---- لوحة الإدارة: pickupSummary ----
+  // Shape per entry: [date, cityIdx, typeIdx, statusIdx, reasonIdx, requests, rawShipments, secondStatusIdx, finalStatusIdx]
+  // نفس القواميس (cities/types/statuses/reasons) المستخدمة في rows. إضافة فقط.
+  const pickupSummary = Object.keys(summaryGroups).map(function (k) {
+    const g = summaryGroups[k];
+    return [g.d, cIdx[g.c], tIdx[g.t], sIdx[g.s], rIdx[g.r], g.count, g.raw, secIdx[g.sec], finIdx[g.fin]];
+  });
+
+  // statusDetail entry: [date, clientIdx, reasonIdx, cityIdx, requests, rawShipments, statusIdx, secondIdx, finalIdx]  (كل الحالات غير Done + أي طلب له حالة ثانية)
+  const statusDetail = Object.keys(failGroups).map(function (k) {
+    const g = failGroups[k];
+    return [g.d, clIdx[g.cl], rIdx[g.r], cIdx[g.c], g.count, g.raw, sIdx[g.s], secIdx[g.sec], finIdx[g.fin]];
+  });
+
   return {
-    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays,
+    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays, pickupSummary, statusDetail,
     secondStatuses, finalStatuses, pendingReasons,
     totalRecords, processedRows, skippedRows, skippedRowReasons,
     hasShipments, totalShipments,
