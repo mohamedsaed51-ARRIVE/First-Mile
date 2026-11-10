@@ -139,14 +139,18 @@ const CONFIG = window.ARRIVE_CONFIG || {};
     // Phase 6A (additive): pickupDays is optional — defaults to [] so an
     // older/cached API response with no pickupDays field never breaks
     // dashboard load. rows/months/.../meta destructuring is unchanged.
-    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], secondStatuses = [], finalStatuses = [], driverBranch, salaryRef, meta } = DATA;
+    const { months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays = [], secondStatuses = [], finalStatuses = [], pendingReasons = [], driverBranch, salaryRef, meta } = DATA;
     const DONE_IDX = statuses.indexOf('Done');
     const FAIL_IDX = statuses.indexOf('Fail');
     const TYPE_COLORS = ArriveDS.typeColors();
-    // الحالة الثانية (عمود I): تصنيف بالنص (غير حساس لحالة الأحرف/المسافات).
-    const SAME_DAY_RE = /same\s*-?\s*day|نفس\s*اليوم/i, IN_PROGRESS_RE = /in\s*-?\s*progress|قيد\s*التنفيذ/i;
-    const SAME_DAY_IDX = new Set(secondStatuses.map((v,i)=>SAME_DAY_RE.test(v)?i:-1).filter(i=>i>=0));
-    const IN_PROGRESS_IDX = new Set(secondStatuses.map((v,i)=>IN_PROGRESS_RE.test(v)?i:-1).filter(i=>i>=0));
+    // عمود Shipment Status: مطابقة تامة للحالة بعد توحيد الكتابة العربية
+    // (أ/إ/آ→ا، ى→ي، ة→ه، إزالة التشكيل والمسافات الزائدة) — أي حالة أخرى لا تُحسب.
+    const normStatus = v => String(v||'').toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'')
+      .replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+    const SAME_DAY_VALUES = new Set(['تم الارسال في نفس اليوم','sent same day']);
+    const PENDING_VALUES = new Set(['معلق','pending']);
+    const SAME_DAY_IDX = new Set(secondStatuses.map((v,i)=>SAME_DAY_VALUES.has(normStatus(v))?i:-1).filter(i=>i>=0));
+    const IN_PROGRESS_IDX = new Set(secondStatuses.map((v,i)=>PENDING_VALUES.has(normStatus(v))?i:-1).filter(i=>i>=0));
 
     // PHASE 1: the canonical filtering engine — see filters.js. Built once
     // per dataset load; every filter-affecting function below reads
@@ -225,6 +229,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       ships:'<path d="M21 8l-9-5-9 5v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"/>',
       sameday:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       inprogress:'<path d="M21 12a9 9 0 11-3-6.7M21 4v5h-5"/>',
+      pendingfinal:'<path d="M9 11l3 3 8-8M20 12v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1h11"/>',
       compliance:'<path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/>'
     };
     function inProgFootHtml(byFinal){
@@ -306,11 +311,13 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const driverSet = new Set(), citySet = new Set();
       const branchShips = {};
       let total=0, done=0, fail=0, fees=0, ships=0, sameDay=0, inProg=0;
-      const inProgFinal = {};   // الحالة النهائية (عمود J) لطلبات In Progress فقط
+      const inProgFinal = {};   // Final Status للطلبات المعلقة فقط
+      const inProgReason = {};  // Pending Reason للطلبات المعلقة فقط
       fr.forEach(r=>{
-        const [,ci,ai,di,ti,si,cli,ri,count,f,sh0,sec,fin] = r;
+        const [,ci,ai,di,ti,si,cli,ri,count,f,sh0,sec,fin,pri] = r;
         if(SAME_DAY_IDX.has(sec)) sameDay+=count;
-        if(IN_PROGRESS_IDX.has(sec)){ inProg+=count; const fl=finalStatuses[fin]||''; inProgFinal[fl]=(inProgFinal[fl]||0)+count; }
+        if(IN_PROGRESS_IDX.has(sec)){ inProg+=count; const fl=finalStatuses[fin]||''; inProgFinal[fl]=(inProgFinal[fl]||0)+count;
+          const pr=pendingReasons[pri]||''; inProgReason[pr]=(inProgReason[pr]||0)+count; }
         const sh = sh0||0;   // عدد الشحنات (rows[10]) — صفر لو الـ API قديم
         total+=count; fees+=f; ships+=sh; if(si===DONE_IDX) done+=count; else if(si===FAIL_IDX) fail+=count;
         driverSet.add(di); citySet.add(ci);
@@ -332,7 +339,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
         const brKey = br || t('rtBranchUnmapped');
         branchShips[brKey]=(branchShips[brKey]||0)+sh;
       });
-      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, branchShips, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, driverSet, citySet };
+      return { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, branchShips, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, inProgReason, driverSet, citySet };
     }
 
     function computeAggregates(){
@@ -346,7 +353,7 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       filterUI.renderActiveChips();
 
       const agg = computeAggregates();
-      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, driverSet, citySet } = agg;
+      const { fr, driverAgg, areaAgg, clientAgg, reasonAgg, cityAgg, typeAgg, branchAgg, total, done, fail, fees, ships, sameDay, inProg, inProgFinal, inProgReason, driverSet, citySet } = agg;
 
       document.getElementById('filteredRecordCount').innerHTML =
         `${t('filteredRecordsLabel')}: <b>${fmtNum(total)}</b> ${t('ofTotalLabel',{n:fmtNum(meta.totalRecords)})}`;
@@ -369,13 +376,15 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const recordedTotal = meta.recordedYes + meta.recordedNo;
       const complianceRate = recordedTotal ? meta.recordedYes/recordedTotal*100 : 0;
 
+      const pendingWithFinal = Object.keys(inProgFinal).reduce((a,k)=>a+(k?inProgFinal[k]:0),0);
       const kpis = [
         {label:t('kpiTotalRequests'), icon:'total', value:fmtNum(total), foot:trendHtml(total, prevAgg?prevAgg.total:null, true)},
         {label:t('kpiTotalShipments'), icon:'ships', value:fmtNum(ships), foot: meta.hasShipments===false ? t('shipmentsColMissingShort') : trendHtml(ships, prevAgg?prevAgg.ships:null, true)},
         {label:t('kpiCompleted'), icon:'done', value:fmtNum(done), foot:`${total?(done/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
-        // الحالة الثانية (عمود I): نفس اليوم / In Progress. داخل In Progress: توزيع الحالة النهائية (عمود J).
+        // Shipment Status: «تم الإرسال في نفس اليوم» و«معلق». كارت الحالة النهائية: توزيع Final Status للمعلق فقط.
         {label:t('kpiSameDay'), icon:'sameday', value:fmtNum(sameDay), foot:`${total?(sameDay/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
-        {label:t('kpiInProgress'), icon:'inprogress', value:fmtNum(inProg), foot:inProgFootHtml(inProgFinal)},
+        {label:t('kpiInProgress'), icon:'inprogress', value:fmtNum(inProg), foot:`${total?(inProg/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
+        {label:t('kpiPendingFinal'), icon:'pendingfinal', value:fmtNum(pendingWithFinal), foot:inProgFootHtml(inProgFinal)},
         {label:t('kpiFailed'), icon:'fail', value:fmtNum(fail), foot:`${total?(fail/total*100).toFixed(1):'0'}% ${t('footOfTotal')}`},
         {label:t('kpiSuccessRate'), icon:'rate', value:successRate.toFixed(1)+'%', foot:trendHtml(successRate, prevSuccessRate, true)},
         {label:t('kpiExtraFees'), icon:'fees', value:fmtCurrency(fees), foot:trendHtml(fees, prevAgg?prevAgg.fees:null, true)},
@@ -424,6 +433,14 @@ const CONFIG = window.ARRIVE_CONFIG || {};
       const reasonList = Object.keys(reasonAgg).map(ri=>({name:reasons[ri], count:reasonAgg[ri]})).filter(r=>r.name!=='N/A').sort((a,b)=>b.count-a.count);
       renderHBar('reasonChart', reasonList.map(r=>r.name), reasonList.map(r=>r.count), ArriveDS.color('fail'));
       document.getElementById('reasonPanelNote').textContent = reasonList.length ? t('failedReasonNote',{n:fmtNum(reasonList.reduce((a,b)=>a+b.count,0))}) : t('noFailedInRange');
+
+      // جدول أسباب المعلق (Pending Reason) — للطلبات المعلقة فقط
+      const prList = Object.keys(inProgReason).map(k=>({name:k, count:inProgReason[k]})).sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name));
+      document.getElementById('pendingReasonBody').innerHTML = prList.length
+        ? prList.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name||t('pendingReasonNone'))}</td><td style="text-align:end;">${fmtNum(r.count)}</td><td style="text-align:end;">${(r.count/inProg*100).toFixed(1)}%</td></tr>`).join('')
+          + `<tr style="font-weight:700;"><td></td><td>${esc(t('totalRowLabel'))}</td><td style="text-align:end;">${fmtNum(inProg)}</td><td style="text-align:end;">100.0%</td></tr>`
+        : `<tr><td colspan="4"><div class="empty-state">${esc(t('noPendingInRange'))}</div></td></tr>`;
+      document.getElementById('pendingReasonNote').textContent = prList.length ? t('pendingReasonNote',{n:fmtNum(inProg)}) : t('noPendingInRange');
 
       // حالة فارغة موحّدة للرسوم عند عدم وجود بيانات مطابقة للفلاتر (عرض فقط)
       if(total===0) document.querySelectorAll('#dashboardRoot .chart-box').forEach(b=>{ b.innerHTML=`<div class="empty-state">${esc(t('emptyFilters'))}</div>`; });
