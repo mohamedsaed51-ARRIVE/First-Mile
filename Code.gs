@@ -151,10 +151,12 @@ const CONFIG = {
     shipments: ['Pickup', 'Shipments', 'Shipment', 'No of Shipments', 'Number of Shipments', 'عدد الشحنات'],
     reason:    ['Reason', 'Failure Reason'],
     recorded:  ['Recorded on system', 'Recorded On System', 'Recorded'],
-    // عمود I: "الحالة الثانية" (Sent Same Day / In Progress) — اختياري
-    secondStatus: ['الحالة الثانية', 'الحاله الثانيه', 'الحالة الثانيه', 'Second Status'],
-    // عمود J: "الحالة النهائية" (تُعرض داخل كارت In Progress) — اختياري
-    finalStatus:  ['الحالة النهائية', 'الحاله النهائيه', 'الحالة النهائيه', 'Final Status']
+    // عمود "Shipment Status" (تم الإرسال في نفس اليوم / معلق) — اختياري
+    secondStatus: ['Shipment Status', 'الحالة الثانية', 'الحاله الثانيه', 'الحالة الثانيه', 'Second Status'],
+    // عمود "Final Status": الحالة النهائية للطلبات المعلقة — اختياري
+    finalStatus:  ['Final Status', 'الحالة النهائية', 'الحاله النهائيه', 'الحالة النهائيه'],
+    // عمود "Pending Reason": سبب التعليق (جدول أسباب المعلق) — اختياري
+    pendingReason: ['Pending Reason', 'سبب التعليق', 'سبب المعلق']
   },
 
   // Columns that MUST be resolved for the Pickup Request sheet to be usable.
@@ -181,7 +183,7 @@ function doGet(e) {
 
     const bypassCache = params.refresh === '1';
     const cache = CacheService.getScriptCache();
-    const cacheKey = 'first_mile_dashboard_payload_v3';
+    const cacheKey = 'first_mile_dashboard_payload_v8';
 
     if (!bypassCache) {
       const cached = safeCacheGet(cache, cacheKey);
@@ -477,8 +479,11 @@ function buildPayload() {
     reasons: pickupResult.reasons,
     rows: pickupResult.rows,
     pickupDays: pickupResult.pickupDays,
+    pickupSummary: pickupResult.pickupSummary,
+    statusDetail: pickupResult.statusDetail,
     secondStatuses: pickupResult.secondStatuses,
     finalStatuses: pickupResult.finalStatuses,
+    pendingReasons: pickupResult.pendingReasons,
     driverBranch: branchInfo.driverBranch,
     salaryRef: salaryRef,
     meta: meta
@@ -496,9 +501,11 @@ function readPickupRequest() {
   const header = findHeaderRowAndColumns(values, CONFIG.COLUMN_ALIASES, CONFIG.PICKUP_REQUIRED_COLUMNS, CONFIG.HEADER_SEARCH_ROWS);
   const col = header.col; // canonical-key -> column index, resolved case-insensitively
 
-  const monthsSet = {}, citiesSet = {}, areasSet = {}, driversSet = {}, clientsSet = {}, typesSet = {}, statusesSet = {}, reasonsSet = {}, secondSet = {}, finalSet = {};
+  const monthsSet = {}, citiesSet = {}, areasSet = {}, driversSet = {}, clientsSet = {}, typesSet = {}, statusesSet = {}, reasonsSet = {}, secondSet = {}, finalSet = {}, pendReasonSet = {};
   const groups = {}; // composite-key -> {m,c,a,d,t,s,cl,r,count,fees}
   const pickupDaysRaw = []; // Phase 6A: one un-aggregated entry per valid Pickup-type row (date kept, never merged)
+  const failGroups = {}; // لوحة الإدارة: تفصيل الطلبات غير المكتملة (Fail / In progress / أي حالة غير Done) حسب يوم/عميل/سبب/مدينة/حالة
+  const summaryGroups = {}; // لوحة الإدارة: تجميع يومي حسب الحالة/السبب/المدينة/النوع مع الشحنات الخام (بغض النظر عن الحالة)
 
   let totalRecords = 0, processedRows = 0, skippedRows = 0;
   const skippedRowReasons = {}; // reason label -> count, for diagnostics
@@ -545,7 +552,8 @@ function readPickupRequest() {
     // الحالة الثانية (I) والحالة النهائية (J): نص كما هو، أو '' لو فارغ/غير موجود العمود
     const second = col.secondStatus !== undefined ? (cleanText(row[col.secondStatus]) || '') : '';
     const finalSt = col.finalStatus !== undefined ? (cleanText(row[col.finalStatus]) || '') : '';
-    secondSet[second] = true; finalSet[finalSt] = true;
+    const pendReason = col.pendingReason !== undefined ? (cleanText(row[col.pendingReason]) || '') : '';
+    secondSet[second] = true; finalSet[finalSt] = true; pendReasonSet[pendReason] = true;
     // الشحنات تُحسب للطلبات المكتملة (Done) فقط
     const ships = (hasShipments && status === 'Done') ? (Number(row[col.shipments]) || 0) : 0;
     totalShipments += ships;
@@ -560,14 +568,31 @@ function readPickupRequest() {
 
     // العلم الأخير (E/I) يفصل الطلبات ذات التكلفة الخارجية (Extra Fees > 0) عن غيرها
     // داخل نفس المجموعة، حتى يمكن حساب شحنات البيك أب الخارجي بدقة.
-    const key = [mKey, city, area, driver, type, status, client, reason, fees > 0 ? 'E' : 'I', second, finalSt].join('|');
-    if (!groups[key]) groups[key] = { m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason, sec: second, fin: finalSt, count: 0, fees: 0, ships: 0 };
+    const key = [mKey, city, area, driver, type, status, client, reason, fees > 0 ? 'E' : 'I', second, finalSt, pendReason].join('|');
+    if (!groups[key]) groups[key] = { m: mKey, c: city, a: area, d: driver, t: type, s: status, cl: client, r: reason, sec: second, fin: finalSt, pr: pendReason, count: 0, fees: 0, ships: 0 };
     groups[key].count += 1;
     groups[key].fees += fees;
     groups[key].ships += ships;
 
     const dStr = fmtDate(dateObj);
     if (dStr) { if (!dateMin || dStr < dateMin) dateMin = dStr; if (!dateMax || dStr > dateMax) dateMax = dStr; }
+
+    // ---- لوحة الإدارة (additive): عدد الطلبات والشحنات الخام لكل حالة ----
+    // `ships` أعلاه يُحتسب لحالة Done فقط (قاعدة قديمة لا تُمَس). هنا نقرأ عمود
+    // "Pickup" كما هو لكل الحالات حتى تظهر شحنات المُرحَّل والفاشل أيضًا.
+    if (dStr) {
+      const rawShips = hasShipments ? (Number(row[col.shipments]) || 0) : 0;
+      const sk = [dStr, city, type, status, reason, second, finalSt].join('|');
+      if (!summaryGroups[sk]) summaryGroups[sk] = { d: dStr, c: city, t: type, s: status, r: reason, sec: second, fin: finalSt, count: 0, raw: 0 };
+      summaryGroups[sk].count += 1;
+      summaryGroups[sk].raw += rawShips;
+      if (status !== 'Done' || second !== '') {
+        const fk = [dStr, client, reason, city, status, second, finalSt].join('|');
+        if (!failGroups[fk]) failGroups[fk] = { d: dStr, cl: client, r: reason, c: city, s: status, sec: second, fin: finalSt, count: 0, raw: 0 };
+        failGroups[fk].count += 1;
+        failGroups[fk].raw += rawShips;
+      }
+    }
 
     // ---- Phase 6A: pickupDays (additive only — does not touch `groups`/`rows`) ----
     // Matched case-insensitively ('Pickup', 'pickup', 'PICKUP', ' Pickup ' all match)
@@ -592,7 +617,9 @@ function readPickupRequest() {
   const reasons = Object.keys(reasonsSet).sort();
   const secondStatuses = Object.keys(secondSet).sort();
   const finalStatuses = Object.keys(finalSet).sort();
-  const secIdx = {}, finIdx = {};
+  const pendingReasons = Object.keys(pendReasonSet).sort();
+  const secIdx = {}, finIdx = {}, prIdx = {};
+  pendingReasons.forEach((v, i) => prIdx[v] = i);
   secondStatuses.forEach((v, i) => secIdx[v] = i); finalStatuses.forEach((v, i) => finIdx[v] = i);
 
   const mIdx = {}, cIdx = {}, aIdx = {}, dIdx = {}, clIdx = {}, tIdx = {}, sIdx = {}, rIdx = {};
@@ -605,7 +632,8 @@ function readPickupRequest() {
     return [
       mIdx[g.m], cIdx[g.c], aIdx[g.a], dIdx[g.d], tIdx[g.t], sIdx[g.s], clIdx[g.cl], rIdx[g.r],
       g.count, Math.round(g.fees * 100) / 100, g.ships,
-      secIdx[g.sec], finIdx[g.fin]   // [11] الحالة الثانية (I)، [12] الحالة النهائية (J)
+      secIdx[g.sec], finIdx[g.fin],  // [11] Shipment Status، [12] Final Status
+      prIdx[g.pr]                    // [13] Pending Reason
     ];
   });
 
@@ -622,9 +650,23 @@ function readPickupRequest() {
     ];
   });
 
+  // ---- لوحة الإدارة: pickupSummary ----
+  // Shape per entry: [date, cityIdx, typeIdx, statusIdx, reasonIdx, requests, rawShipments, secondStatusIdx, finalStatusIdx]
+  // نفس القواميس (cities/types/statuses/reasons) المستخدمة في rows. إضافة فقط.
+  const pickupSummary = Object.keys(summaryGroups).map(function (k) {
+    const g = summaryGroups[k];
+    return [g.d, cIdx[g.c], tIdx[g.t], sIdx[g.s], rIdx[g.r], g.count, g.raw, secIdx[g.sec], finIdx[g.fin]];
+  });
+
+  // statusDetail entry: [date, clientIdx, reasonIdx, cityIdx, requests, rawShipments, statusIdx, secondIdx, finalIdx]  (كل الحالات غير Done + أي طلب له حالة ثانية)
+  const statusDetail = Object.keys(failGroups).map(function (k) {
+    const g = failGroups[k];
+    return [g.d, clIdx[g.cl], rIdx[g.r], cIdx[g.c], g.count, g.raw, sIdx[g.s], secIdx[g.sec], finIdx[g.fin]];
+  });
+
   return {
-    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays,
-    secondStatuses, finalStatuses,
+    months, cities, areas, drivers, clients, types, statuses, reasons, rows, pickupDays, pickupSummary, statusDetail,
+    secondStatuses, finalStatuses, pendingReasons,
     totalRecords, processedRows, skippedRows, skippedRowReasons,
     hasShipments, totalShipments,
     dateMin, dateMax, recordedYes, recordedNo,
